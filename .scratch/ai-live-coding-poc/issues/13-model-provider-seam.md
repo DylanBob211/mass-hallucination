@@ -47,7 +47,7 @@ option) with sources, plus a short ranked list of failover targets.
 
 ## Answer
 
-Full findings: [research/13-model-provider-seam.md](../research/13-model-provider-seam.md). It has a feature × option table with a source per cell. The research was captured on branch `research/13-model-provider-seam` (commit 55a6834). No end-to-end model call was made. Browser claims rest on package source, docs and live CORS preflights (2026-09-28).
+Full findings: [research/13-model-provider-seam.md](../research/13-model-provider-seam.md). It has a feature × option table with a source per cell. The research was done in a throwaway subagent worktree, since removed; the file above is the only copy. No end-to-end model call was made. Browser claims rest on package source, docs and live CORS preflights (2026-09-28).
 
 - **Effect AI** (stable Effect 3.22 with `@effect/ai` 0.37 and `@effect/ai-anthropic` 0.27; Effect 4 is still an RC):
   - **Covers:** `cache_control` on messages and parts; partial tool input as `tool-params-delta`; `pause_turn` as `"pause"`; `tool_choice`; `apiUrl`, and `transformClient` for adding the browser header.
