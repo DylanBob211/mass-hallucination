@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 14, 15, 16
+Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 14, 15, 16, 17
 
 ## Question
 
@@ -19,6 +19,20 @@ Write `.scratch/ai-live-coding-poc/spec.md` covering:
 - Build sequencing — what order to build it in, and the earliest point at which the thing can be played.
 
 It must be tight enough for a build cycle to start from it with no further decisions required. Anything still undecided at this point is either a missed ticket or genuinely out of scope — say which.
+
+## Carried in from 16
+
+[16](16-visual-parts.md):
+- **The four acceptance scenarios**, not three: scenario 4 (*give me visuals for this*) is checkable as "the agent writes a `hydra` Part that follows an audio Part through `pulse`, `value` or `level`".
+- **The host's Hydra glue** is its own build item: the canvas, a `makeGlobal:false` instance, the `hydra` tag, the output reset before every evaluate, the mute skip, the four helpers, the dry-run instance, and per-Part playback-error attribution. [ADR 0002](../../../docs/adr/0002-scoped-composition-on-published-strudel.md) and [ADR 0004](../../../docs/adr/0004-one-tool-state-pushed-dry-run-gated.md) amendments hold the detail.
+- **Verify first when building:** that wrapping `Pattern.prototype.p` in `beforeEval` collects label → pattern for `pulse`/`value` (read in `@strudel/core@1.2.6`, not tested), and that string `analyze` ids work.
+- **The Hydra grounding note** (about 200 tokens) is part of the prompt-reference build step, next to 15's generated signature index from `glsl-functions.js`. Its content:
+  - the Part shape;
+  - what is in scope (Hydra plus `cycle() pulse(p) value(p, ctl) level(p)` with signatures, nothing from Strudel);
+  - `level(p)` needs `.analyze('<p>')`;
+  - never `a.fft` or `H`;
+  - one output is shown, and the hides-warning.
+- **Editor:** the `hydra` template body is highlighted as JavaScript, with no completion in either language.
 
 ## Deliverable
 

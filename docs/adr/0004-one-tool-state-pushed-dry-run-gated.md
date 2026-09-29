@@ -1,5 +1,7 @@
 # One tool, state pushed, every change dry-run
 
+_Amended by ticket 16 (visual Parts): the snapshot, the dry-run and the error slot gain a Visual Surface. See the amendment at the end._
+
 The agent has exactly one tool, `change_parts`. It never reads state through a tool. Instead, every
 human instruction arrives with a fresh snapshot of the Performance. Every scenario starts by reading
 the code, so a read tool would put an unavoidable round trip into every turn. There is also no
@@ -90,7 +92,7 @@ It runs before every change, at every Autonomy. Only code that passes it lands.
   through the error slot of the next snapshot, never as a delayed tool result. That respects "acts
   only when instructed" and adds no latency.
 - **Surface-specific:** it is the one Surface-specific piece of the tool surface. Each Surface
-  would bring its own dry-run; only Strudel's is built.
+  would bring its own dry-run; Strudel's and, since ticket 16, Hydra's are built.
 
 ## What the agent cannot do, and where that lives
 
@@ -113,3 +115,35 @@ The limits live in the tool and the dry-run, not in the UI:
   dry-run already queries every pattern and could return event counts per Part for free.
 - **Waiting a cycle after an agent Apply to report playback errors.** Rejected. It works only at
   Apply Autonomy and costs more than a cycle of latency.
+
+## Amendment: visual Parts (ticket 16)
+
+**Snapshot.** `surface` is `"audio" | "visual"`. Each Visual Part's index entry adds `outputs`: the
+Hydra outputs it writes (`["o0"]`), as reported by its last dry-run.
+
+**Dry-run, second step.** After the Strudel step, Visual Parts run against a throwaway
+`hydra-synth` instance (`makeGlobal:false`, `autoLoop:false`, its own small WebGL context, created
+once per session). Its `.out()` generates the GLSL strictly, compiles it, and probes every
+parameter function at cycles {0, .37, 1.5, 3.9} with `pulse`/`value`/`level` stubbed to 0, 1 and
+0.5. About 1.3 ms per Part; the live canvas is never touched.
+
+- **`invalid`** for a Visual Part adds `kind: "syntax" | "name" | "argument" | "shader" | "parameter"`.
+  A `parameter` message names the failing probe (`at cycle 3.9, level=0: returned Infinity`).
+  Hydra code in any shape other than a `hydra` template is `invalid` too.
+- **Warned, not refused:**
+  - the Part writes no output;
+  - the Part hides another Part on an output (`glow hides viz on o0`): the last `.out()` in Source
+    order wins, and nothing composites automatically;
+  - a helper names a Part that doesn't exist;
+  - `level('x')` is used where `x` has no `.analyze('x')`.
+- **Blind spot, accepted:** a parameter that fails only at an unprobed moment, a shader that fails
+  only on the real GPU, and a link broken later by a rename.
+
+**Playback errors from Visual Parts.** The host wraps each Visual Part's parameter functions and
+checks `gl.getError()` after ticks, so a failure is attributed to its Part. It is reported **once**,
+not per frame, into the error slot with `phase: "playback"`, and reaches the agent only in the next
+snapshot, like any playback error. A frozen output is an error of the Part that last wrote it. The
+host never reverts a broken visual.
+
+**Limits.** The agent's reach on the Visual Surface is the same as on Audio. Its visual change at
+Apply Autonomy lands on the same cycle boundary as any agent Apply.

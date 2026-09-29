@@ -1,13 +1,13 @@
 # pair-formance
 
-A browser live-coding environment where a human codes music and an AI pair-programmer inspects and modifies the live-coding state alongside them.
+A browser live-coding environment where a human codes music and visuals, and an AI pair-programmer inspects and modifies the live-coding state alongside them.
 
 ## Language
 
 ### What the agent perceives
 
 **Performance**:
-The whole live-coding state a human and an agent work on together: its source, the Parts projected from it, transport, and the last error. Gains non-audio Parts later without changing meaning.
+The whole live-coding state a human and an agent work on together: its source, the Parts projected from it, transport, and the last error. Its Parts may be audio or visual.
 _Avoid_: Session, Patch, Sketch, "the buffer"
 
 **Source**:
@@ -23,8 +23,15 @@ Top-level code in a Performance that belongs to no Part — shared helpers, whol
 _Avoid_: Header, globals, setup
 
 **Surface**:
-The medium a Part produces output on. Audio is the only Surface today; a visual Surface is anticipated, which is why no Part is assumed to be musical.
-_Avoid_: Target, output, channel, backend
+The medium a Part produces output on: **Audio** or **Visual**. Read from the Part's code, never
+declared separately: a Part written in the visual language is Visual, any other Part is Audio.
+_Avoid_: Target, output, channel, backend, layer
+
+**Visual Part**:
+A Part on the Visual Surface. It follows the music only by reading it through its code (the cycle,
+another Part's events or values, or another Part's loudness); nothing outside the code records the
+link.
+_Avoid_: Visualiser, scene, shader, sketch
 
 **Transport**:
 Whether a Performance is running, and at what tempo. Excludes position within the cycle, which is machinery rather than something the agent perceives.
@@ -58,7 +65,7 @@ Derived from the Source, never stored: the same text always has the same Rev.
 _Avoid_: Version, revision number, etag
 
 **Muted / soloed**:
-Conditions of a Part, read from its label rather than held anywhere. A Part is muted or soloed only because its Source says so.
+Conditions of a Part, read from its label rather than held anywhere. A Part is muted or soloed only because its Source says so. A muted Visual Part is not drawn. Soloing works within one Surface: soloing an Audio Part silences the other Audio Parts and leaves the Visual Parts showing, and the other way round.
 
 ### How the agent's changes land
 

@@ -1,5 +1,7 @@
 # Apply by scoped composition; target published Strudel
 
+_Amended by ticket 16 (visual Parts): a second pinned dependency and an output reset before every evaluate. See the amendment at the end._
+
 _Amended by [ADR 0003](0003-agent-changes-land-by-autonomy-never-on-unapplied-text.md): a Part missing from the Source keeps its Live code until an Apply of every Part, and the "no Live code contributes nothing" rule below is now locked._
 
 An **Apply** never evaluates the Source. It evaluates a transient document composed from the
@@ -55,3 +57,23 @@ discipline. No git dependency, no vendoring, no carried patches.
   prototype.
 - The composed document is derived and thrown away after evaluation. It is never written back;
   the Source stays exactly what the human typed, per ADR 0001.
+
+## Amendment: visual Parts (ticket 16)
+
+- **Two direct dependencies, not one.** `hydra-synth@1.4.0` is pinned exactly beside
+  `@strudel/web@1.3.0`. `@strudel/hydra` is **not** used: it imports unpinned hydra-synth from
+  unpkg at run time, loads a second `@strudel/core` (so `H()` fails with `no time set!`), and its
+  global mode overwrites Strudel's `speed`, `shape`, `time`, `hush`, `noise` and `src`. About 40
+  lines of our own glue replace it: the canvas, a `makeGlobal:false` Hydra instance, the scoped
+  `hydra` tag, the output reset, the link helpers and the dry-run instance. Still zero patches and
+  zero vendoring.
+- **Every Apply re-runs every Visual Part's Live code**, because composition includes every Part.
+  Hydra keeps drawing outputs that nothing writes any more, so the host resets all four outputs
+  (`solid(0,0,0,0)`), `render(o0)` and `update`/`afterUpdate` synchronously before every evaluate.
+  No output is tracked per Part. Tested in 14: no black frame, feedback framebuffers survive. The
+  cost is a shader recompile of every Visual Part on every Apply, a first-frame stall (about 28 ms
+  on a software renderer) that the latency budget must measure on a real GPU.
+- **Removing a Visual Part** behaves like removing an Audio Part: it keeps showing until an Apply
+  of every Part.
+- **Muted Visual Parts** are skipped by the host, because Strudel's `.p` mute runs only after the
+  template has drawn.

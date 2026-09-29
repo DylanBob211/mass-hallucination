@@ -38,6 +38,14 @@ The brief requires the interaction to feel "fast and controlled enough to judge 
 
 [14](14-hydra-in-published-strudel.md): a Hydra swap lands on the **next animation frame**, unquantised, with no black frame. The first frame after a swap can stall about 28 ms (software renderer; measure it on real hardware). The visual dry-run costs about 1.3 ms per Part. Whether an agent's *visual* Apply waits for the cycle is 16's to decide. Budget it once decided.
 
+## Carried in from 16
+
+[16](16-visual-parts.md):
+- **Visual Applies are not quantised separately.** An agent Apply lands on the cycle boundary for both Surfaces together, so budget one wait, not two.
+- **Every Apply recompiles every visual shader.** Each Visual Part's Live code re-runs, so the first-frame stall (about 28 ms on SwiftShader) happens on *every* Apply, audio-only ones included. The human's requirement: **the picture keeps flowing; a small stutter is tolerated.** Measure the stall on a real GPU with several Visual Parts and state the tolerated number.
+- **The dry-run has a second step for visual Parts**, about 1.3 ms per Part times the probe grid (4 cycles × 3 helper stubs). Measure it.
+- **`pulse`/`value` compensate Strudel's ~100 ms scheduler lead**, which was inferred and not measured. Measure onset-to-flash against the audible kick; that is the audiovisual half of "controlled".
+
 ## Deliverable
 
 Stated numeric targets and a model recommendation, recorded for the spec.
