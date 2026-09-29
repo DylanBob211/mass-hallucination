@@ -22,7 +22,7 @@ describe("façade", () => {
 
     const unsubscribe = facade.subscribe((viewModel) => received.push(viewModel));
 
-    expect(received).toEqual([{ transport: { started: false, cps: 0.5 }, cycle: 0 }]);
+    expect(received).toEqual([{ transport: { started: false, cps: 0.5 }, cycle: 0, parts: [] }]);
     expect(Object.isFrozen(received[0])).toBe(true);
     unsubscribe();
     await facade.dispose();

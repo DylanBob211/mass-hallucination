@@ -1,6 +1,8 @@
 import { Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from "effect";
+import { Editor } from "./Editor";
+import { type Part, parsePerformance } from "./Performance";
 import { Strudel } from "./Strudel";
-import { initialViewModel, type Transport, type ViewModel } from "./viewModel";
+import { initialViewModel, type PartView, type Transport, type ViewModel } from "./viewModel";
 
 /**
  * How often transport is read. Strudel announces neither `setcps` nor the passing of cycles, so the
@@ -16,16 +18,38 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
   static readonly layer = Layer.scoped(
     ViewModelStore,
     Effect.gen(function* () {
+      const editor = yield* Editor;
       const strudel = yield* Strudel;
-      const ref = yield* SubscriptionRef.make(initialViewModel);
+      const initial = withParts(initialViewModel, parsePerformance(yield* editor.read).parts);
+      const ref = yield* SubscriptionRef.make(initial);
+      // Transport and the Source change the view model from separate fibers.
+      const lock = yield* Effect.makeSemaphore(1);
 
-      const readTransport = Effect.gen(function* () {
-        const current = yield* SubscriptionRef.get(ref);
-        const next = withTransport(current, yield* strudel.transport, yield* strudel.position);
-        if (next !== current) yield* SubscriptionRef.set(ref, next);
-      });
+      /** Publishes `derive`'s result unless it is the current view model itself. */
+      const publish = (derive: (current: ViewModel) => Effect.Effect<ViewModel>) =>
+        lock.withPermits(1)(
+          Effect.gen(function* () {
+            const current = yield* SubscriptionRef.get(ref);
+            const next = yield* derive(current);
+            if (next !== current) yield* SubscriptionRef.set(ref, next);
+          }),
+        );
+
+      const readTransport = publish((current) =>
+        Effect.gen(function* () {
+          return withTransport(current, yield* strudel.transport, yield* strudel.position);
+        }),
+      );
       yield* Effect.forkScoped(
         Effect.repeat(readTransport, Schedule.spaced(transportPollInterval)),
+      );
+
+      yield* Effect.forkScoped(
+        Stream.runForEach(editor.changes, (source) =>
+          publish((current) =>
+            Effect.sync(() => withParts(current, parsePerformance(source).parts)),
+          ),
+        ),
       );
 
       return { changes: ref.changes };
@@ -44,3 +68,22 @@ const withTransport = (current: ViewModel, transport: Transport, position: numbe
     cycle,
   });
 };
+
+/** The Parts' views, reusing each one whose view is unchanged, and the list if every one is. */
+const withParts = (current: ViewModel, parts: ReadonlyArray<Part>): ViewModel => {
+  const views = parts.map((part) => {
+    const previous = current.parts.find((view) => view.id === part.id);
+    return previous !== undefined && sameView(previous, part) ? previous : viewOf(part);
+  });
+  const sameList =
+    views.length === current.parts.length &&
+    views.every((view, index) => view === current.parts[index]);
+  if (sameList) return current;
+  return Object.freeze({ ...current, parts: Object.freeze(views) });
+};
+
+const sameView = (view: PartView, part: Part) =>
+  view.muted === part.muted && view.soloed === part.soloed && view.surface === part.surface;
+
+const viewOf = ({ id, muted, soloed, surface }: Part): PartView =>
+  Object.freeze({ id, muted, soloed, surface });

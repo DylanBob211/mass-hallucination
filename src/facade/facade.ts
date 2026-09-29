@@ -5,7 +5,8 @@ import type { Strudel } from "../core/Strudel";
 import { initialViewModel, type ViewModel } from "../core/viewModel";
 import { ViewModelStore } from "../core/ViewModelStore";
 
-export type { Transport, ViewModel } from "../core/viewModel";
+export type { PartView, Transport, ViewModel } from "../core/viewModel";
+export type { Surface } from "../core/Performance";
 
 /** The only place Effect meets the UI (ADR 0006): plain calls in, one view model out. */
 export interface Facade {
