@@ -4,6 +4,8 @@ status: accepted (POC only)
 
 # Svelte 5 and raw CodeMirror 6, behind a plain façade over the Effect core
 
+_Amended by ticket 08 (2026-09-29): where tests run. See the amendment at the end._
+
 **This decision covers the POC only**, like ADR 0005. The UI is a thin shell over the Effect core.
 The stack was chosen to fit what 01 and 07 demand, and the shell is kept replaceable.
 
@@ -46,7 +48,7 @@ The stack was chosen to fit what 01 and 07 demand, and the shell is kept replace
 - **Lint and format:**
   - ESLint flat config: typescript-eslint type-checked rules and `eslint-plugin-svelte`.
   - Prettier with the Svelte and Tailwind plugins, plus `eslint-config-prettier`.
-- **Tests:** Vitest with `@effect/vitest`.
+- **Tests:** Vitest with `@effect/vitest`. Where they run is in the amendment at the end.
 - **API key:** read from `.env.local` as `import.meta.env.VITE_ANTHROPIC_API_KEY` (ADR 0005).
 - **Styling:**
   - Tailwind v4 via `@tailwindcss/vite`. Its theme tokens are CSS variables.
@@ -83,3 +85,13 @@ The stack was chosen to fit what 01 and 07 demand, and the shell is kept replace
 
 - **09:** focus must never leave the editor unless the performer chooses. Bits UI dialogs and
   popovers move or trap focus by default.
+
+## Amendment: the test stack (ticket 08)
+
+- **Node is the default environment.** The Effect core runs under `@effect/vitest` against a fake
+  `Editor` service and a fake `Model`. No DOM, no jsdom.
+- **Vitest browser mode, with the Playwright provider,** only for tests that touch the real bundle:
+  the dry-run against `@strudel/web` and hydra-synth needs Web Audio and WebGL. It is a separate
+  Vitest project, so the Node suite never starts a browser.
+- **No component tests and no end-to-end suite.** Components never import Effect and only render
+  the façade's view model, which is tested in Node. The POC is throwaway.

@@ -44,3 +44,13 @@ An ADR recording the choice and the tiebreaker used.
   - Tailwind v4, with its tokens as CSS variables that the CM theme reads.
   - Bits UI for primitives, added only when needed.
 - **Handed to 09:** focus must not leave the editor unless the performer chooses.
+
+### Amendment: the test stack (2026-09-29)
+
+The answer named Vitest but not where tests run. Two environments, chosen by what the code under test needs:
+
+- **Node, the default.** The Effect core (agent loop, `change_parts` pipeline, Part parsing, Revs) runs under `@effect/vitest` against a fake `Editor` service and a fake `Model`. No DOM is needed.
+- **Vitest browser mode with the Playwright provider**, only for tests that touch the real bundle: the dry-run against `@strudel/web` and hydra-synth, which need Web Audio and WebGL that Node and jsdom lack. Kept as a separate Vitest project, so the fast suite never starts a browser.
+- **No component tests and no end-to-end suite.** The UI is a thin shell over the façade, and the POC is throwaway. The façade's view model is tested in Node instead.
+
+Recorded as an amendment to [ADR 0006](../../../docs/adr/0006-svelte-codemirror-behind-an-effect-facade.md).
