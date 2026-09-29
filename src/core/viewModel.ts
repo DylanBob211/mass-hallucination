@@ -1,8 +1,23 @@
 /**
  * What the UI renders from: one immutable object, replaced whole on each update, with the
  * references of unchanged sub-objects reused (ADR 0006). Plain types only, no Effect, so the UI may
- * import it. Empty until the Performance model lands; later tickets add its fields (spec §10).
+ * import it. Later tickets add fields (spec §10).
  */
-export type ViewModel = Readonly<Record<string, never>>;
+export interface ViewModel {
+  readonly transport: Transport;
+  /** The whole cycle the scheduler is in; 0 while stopped. Host machinery, not Transport. */
+  readonly cycle: number;
+}
 
-export const emptyViewModel: ViewModel = Object.freeze({});
+/** Whether the Performance is running, and at what tempo (CONTEXT.md). */
+export interface Transport {
+  readonly started: boolean;
+  /** Cycles per second. */
+  readonly cps: number;
+}
+
+/** Strudel's scheduler starts stopped at 0.5 cps. */
+export const initialViewModel: ViewModel = Object.freeze({
+  transport: Object.freeze({ started: false, cps: 0.5 }),
+  cycle: 0,
+});

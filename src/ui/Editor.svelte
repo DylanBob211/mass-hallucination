@@ -1,12 +1,14 @@
 <script lang="ts">
+  import type { EditorView } from "@codemirror/view";
   import type { Attachment } from "svelte/attachments";
-  import { createEditor } from "./editor";
+
+  let { view }: { view: EditorView } = $props();
 
   const mount: Attachment<HTMLElement> = (node) => {
-    const view = createEditor(node, "");
+    node.append(view.dom);
     view.focus();
     return () => {
-      view.destroy();
+      view.dom.remove();
     };
   };
 </script>

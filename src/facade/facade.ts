@@ -1,8 +1,11 @@
-import { Effect, Fiber, ManagedRuntime, Stream } from "effect";
-import { emptyViewModel, type ViewModel } from "../core/viewModel";
+import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
+import { apply, stopTransport } from "../core/apply";
+import type { Editor } from "../core/Editor";
+import type { Strudel } from "../core/Strudel";
+import { initialViewModel, type ViewModel } from "../core/viewModel";
 import { ViewModelStore } from "../core/ViewModelStore";
 
-export type { ViewModel } from "../core/viewModel";
+export type { Transport, ViewModel } from "../core/viewModel";
 
 /** The only place Effect meets the UI (ADR 0006): plain calls in, one view model out. */
 export interface Facade {
@@ -10,13 +13,17 @@ export interface Facade {
   readonly viewModel: ViewModel;
   /** Calls `listener` now with the current view model, then on every change. */
   subscribe(listener: (viewModel: ViewModel) => void): () => void;
+  /** Applies every Part and starts the transport if it is stopped (spec §5). */
+  apply(): Promise<void>;
+  stopTransport(): Promise<void>;
   dispose(): Promise<void>;
 }
 
-export const createFacade = (): Facade => {
-  const runtime = ManagedRuntime.make(ViewModelStore.layer);
+/** The façade over the given editor and repl: live ones in the page, fakes in Node tests. */
+export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
+  const runtime = ManagedRuntime.make(Layer.provideMerge(ViewModelStore.layer, host));
   const listeners = new Set<(viewModel: ViewModel) => void>();
-  let current = emptyViewModel;
+  let current = initialViewModel;
 
   const publishing = runtime.runFork(
     Effect.flatMap(ViewModelStore, (store) =>
@@ -39,6 +46,9 @@ export const createFacade = (): Facade => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    // An evaluation error leaves the previous code playing; the error slot (ticket 05) will show it.
+    apply: () => runtime.runPromise(Effect.ignore(apply)),
+    stopTransport: () => runtime.runPromise(stopTransport),
     async dispose() {
       listeners.clear();
       await runtime.runPromise(Fiber.interrupt(publishing));

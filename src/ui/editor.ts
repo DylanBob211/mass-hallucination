@@ -1,5 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
+import { Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 
 /**
@@ -25,14 +26,45 @@ const theme = EditorView.theme(
   { dark: true },
 );
 
+/** What the performer's keys ask of the Performance (spec §10). */
+export interface EditorCommands {
+  apply(): void;
+  stopTransport(): void;
+}
+
 /**
- * The editor whose document is the Source (ADR 0001, ADR 0006): the only copy of the text.
+ * Ctrl, not Mod, as spec §10 says, and ahead of the default keymap, whose Mod-Enter would insert a
+ * line. Focus stays in the editor.
  */
-export const createEditor = (parent: HTMLElement, source: string): EditorView =>
+const performanceKeymap = (commands: EditorCommands) =>
+  Prec.high(
+    keymap.of([
+      {
+        key: "Ctrl-Enter",
+        run: () => {
+          commands.apply();
+          return true;
+        },
+      },
+      {
+        key: "Ctrl-.",
+        run: () => {
+          commands.stopTransport();
+          return true;
+        },
+      },
+    ]),
+  );
+
+/**
+ * The editor whose document is the Source (ADR 0001, ADR 0006): the only copy of the text. Its DOM
+ * is mounted by the Editor component.
+ */
+export const createEditor = (source: string, commands: EditorCommands): EditorView =>
   new EditorView({
-    parent,
     doc: source,
     extensions: [
+      performanceKeymap(commands),
       history(),
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
