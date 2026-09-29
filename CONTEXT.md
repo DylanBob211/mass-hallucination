@@ -105,6 +105,7 @@ _Avoid_: Prompt, message, command, request
 
 **Turn**:
 The agent's work on one Instruction. It ends when a change lands, when the agent answers without
-changing anything, or when a newer Instruction supersedes it. Ending a Turn never undoes a change
-that has already landed.
+changing anything, when a newer Instruction supersedes it, when the human stops it, or when it gives
+up (too long, or too many refused changes). Ending a Turn never undoes a change that has already
+landed. The Performance keeps playing throughout.
 _Avoid_: Run, step, session, request

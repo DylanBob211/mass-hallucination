@@ -27,6 +27,13 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
 
 <!-- one line per closed ticket: gist + link -->
 
+- [10 — Latency & control budget](issues/10-latency-and-control-budget.md): **the pass/fail line isn't agent speed, it's not disturbing the Performance.**
+  - **Turn limits:** landed within 30 s for 9 in 10 Instructions, a timeout at 60 s, and at most 3 retries. Time is measured in seconds, with the Apply's cycle wait reported separately. No target for the first streamed character.
+  - **No-freeze rule:** never an audible glitch. No agent job holds the main thread over 50 ms, and zero late notes during a Turn. No fix is built in advance; a worker is the noted remedy.
+  - **Visuals:** ≤ 1 dropped frame (limit 100 ms) on Apply, and flashes within ±40 ms of the audible onset, on a real laptop GPU.
+  - **Esc:** stop-to-quiet ≤ 200 ms.
+  - **Model:** Opus 5.5 at `medium` for every scenario, with Sonnet 5.5 as the fallback, and a 1-hour cache on the fixed prefix.
+  - The spec must record a timing record per Turn, long tasks and late notes, frame times and a sync estimate, downloadable as JSON from Ctrl-J.
 - [16 — Visual Parts in the Performance](issues/16-visual-parts.md): **a visual Part is ``label: hydra`…` ``, and it follows the music only through four helpers**: `cycle()`, `pulse('part')`, `value('part','ctl')` and `level('part')`. `level` needs `.analyze('<part>')` on the audio Part. No `H` and no `a.fft`, and the link is only code. The Surface is derived from the tag. Everything else is the audio rule on a second Surface:
   - the host resets outputs before every evaluate, so out-of-Scope visuals keep showing and deleted ones linger until a full Apply;
   - there is no separate quantisation;
@@ -72,7 +79,7 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
 
 - **Musical context across a session** — what the agent remembers between instructions, and whether "context" is just conversation history or something structured about the performance so far. *03 narrowed this:* the Performance is a pure snapshot of now — it holds no history, and nothing the agent did last turn is recoverable from it. So whatever memory exists is a separate thing from perceived state. *05 settled the perceived half:* a fresh snapshot is pushed with every instruction, and the agent has no read tool, so memory is purely whatever the conversation history carries. *From 02:* if the loop resends a growing transcript each turn, prompt caching is the cost lever, and it is invalidated by changing `effort`, switching models mid-session, or adding/removing tools — so this question is entangled with 05 and 10. *From 04:* an open **Proposal** is state held outside the Source, so whether the agent perceives its own pending, Stale or rejected Proposals is part of the same question. *From 09:* the human gets a session log (the peek), but it is human-only; the user wants conversation history as agent context *after* the POC, to make the agent more independent.
 - **More than one landed change per instruction**: *from 05:* the first `ok` ends the agent's tool use for that instruction, because at Propose a second change silently replaces the Proposal. Accepted for now and **to be discussed again** once the POC shows whether agents want to chain. 09 found nothing that needs it: the inline Proposal shows one change.
-- **How the built POC gets judged** — what "fast and controlled enough" and "beautiful and enjoyable" mean in practice. Partly ticketed as the latency budget (10); the creative judgment belongs to the effort *after* this map.
+- **How the built POC gets judged** — "fast and controlled enough" is now defined by [10](issues/10-latency-and-control-budget.md). What remains is "beautiful and enjoyable", a creative judgment that belongs to the effort *after* this map.
 
 ## Out of scope
 
