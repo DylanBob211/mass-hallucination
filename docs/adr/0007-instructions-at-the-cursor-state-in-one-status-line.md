@@ -81,8 +81,46 @@ Prototyped as four switchable variants on branch `prototype/09-instruction-ux`.
 - **Restricting the agent to the aimed-at Part.** Rejected: it would add a rule to `change_parts`
   and block "add a part that fits this one".
 
+## Amendment (17): code over moving visuals
+
+Hydra's canvas sits behind the transparent editor (ADR 0006), so everything above has to stay
+readable over bright, moving, flickering images. Decided in
+[17](../../.scratch/ai-live-coding-poc/issues/17-screen-sharing-code-and-visuals.md), prototyped
+on branch `prototype/17-code-over-visuals` (variant D).
+
+- **The Part in focus sits on a solid, full-width band.** That Part is the agent's target while a
+  Turn runs or a Proposal is open, and otherwise the Part under the cursor. The agent's work always
+  lands on that band, so the streamed draft and the inline diff are always readable.
+- **Every other line gets its own lighter box**, drawn only as wide as its text. This works over
+  any image. Outlined text (a heavy text-shadow) was tried first and failed over white strobes and
+  over thin stripes.
+- **Widgets the agent puts in the code** (the stream block, the Proposal, the ghost, the badges) sit
+  on solid panels. The tint, the diff colours and the ghost are unchanged.
+- **The canvas is never dimmed or blurred.** The images the audience sees are not traded for
+  legibility. Only plain CSS backgrounds are used, so the Performance's frame budget (10) is untouched.
+- **Alt-H steps through three views:** all code → only the Part in focus → no code → all. The status
+  line stays in every view, thinned when the code is hidden. Keys keep working while the code is
+  hidden.
+- **Hidden code reveals itself only for a Proposal**, and only as far as the Part in focus: accepting
+  or rejecting needs the diff in view. A Write or Apply landing, a retry or an error never reveal
+  anything, because the status line carries them.
+- **A visual Part's error is also a badge on its label line**, next to the status line entry (16).
+  The failure is already visible on screen. The error's job is to say which Part caused it. When
+  the code is hidden, a small corner chip stands in for the badge.
+
+Rejected in the 17 prototype:
+- **A dark, blurred scrim over the canvas** that deepens while the agent works: it dims the
+  Performance, and a full-screen blur on every frame costs the GPU time 10 budgets.
+- **Code and visuals side by side**, with a strip showing which Part writes which output: it is the
+  most legible option, but it overturns ADR 0006's layout and shows the audience half a picture. The
+  Part index's `outputs` and 16's hides-warning already carry the output facts.
+- **Per-line boxes everywhere with no focus Part**: legible, but every line is equally loud.
+
+Keys added: **Alt-H**.
+
 ## Consequences
 
 - A conversation the human can review, and giving the agent that history to make it more
   independent, are both deferred past the POC.
-- Keys used: Ctrl-Enter, Ctrl-., Ctrl-K, Ctrl-J, Esc, Tab (in the input), Alt-A/P/R, Alt-1/2/3.
+- Keys used: Ctrl-Enter, Ctrl-., Ctrl-K, Ctrl-J, Esc, Tab (in the input), Alt-A/P/R, Alt-1/2/3,
+  Alt-H (17).

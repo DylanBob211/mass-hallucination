@@ -27,6 +27,7 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
 
 <!-- one line per closed ticket: gist + link -->
 
+- [17 — Code over moving visuals](issues/17-screen-sharing-code-and-visuals.md): **only the Part in focus gets a solid band, and the canvas is never dimmed.** The Part in focus is the agent's target while it works, and otherwise the one under the cursor. Other lines get lighter boxes as wide as their text, and the agent's widgets sit on solid panels. Alt-H steps: all code → focus Part → none. Hidden code comes back only for a Proposal. A visual error is also a badge on its Part's label line. The scrim, side-by-side and outlined-text options were rejected. Amends [ADR 0007](../../docs/adr/0007-instructions-at-the-cursor-state-in-one-status-line.md); prototype on branch `prototype/17-code-over-visuals`.
 - [10 — Latency & control budget](issues/10-latency-and-control-budget.md): **the pass/fail line isn't agent speed, it's not disturbing the Performance.**
   - **Turn limits:** landed within 30 s for 9 in 10 Instructions, a timeout at 60 s, and at most 3 retries. Time is measured in seconds, with the Apply's cycle wait reported separately. No target for the first streamed character.
   - **No-freeze rule:** never an audible glitch. No agent job holds the main thread over 50 ms, and zero late notes during a Turn. No fix is built in advance; a worker is the noted remedy.
