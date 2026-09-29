@@ -2,6 +2,7 @@ import type { Repl } from "@strudel/web";
 import { Effect, Layer, Stream } from "effect";
 import { EvalError, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
+import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
 
 /**
  * Loads `@strudel/web` from the bundle and builds its repl. Browsers keep audio suspended until
@@ -87,6 +88,18 @@ export const StrudelLive = Layer.scoped(
             });
             const error: unknown = takeReported()?.error ?? r.state.evalError;
             if (error !== undefined) return yield* evalErrorOf(error, code);
+          }),
+        ),
+      dryRun: (code) =>
+        lock.withPermits(1)(
+          Effect.gen(function* () {
+            yield* booted;
+            const strudel = yield* Effect.promise(() => import("@strudel/web"));
+            yield* Effect.tryPromise({
+              try: () => evaluateDry(strudel, code),
+              catch: (cause) => evalErrorOf(cause, code),
+            });
+            return synonymsSetTwice(code, sameControlIn(strudel));
           }),
         ),
       stop: Effect.sync(() => repl?.stop()),

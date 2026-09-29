@@ -26,4 +26,36 @@ declare module "@strudel/web" {
   /** Resolves once audio is initialised, which happens on the first `mousedown` on `document`. */
   export function initAudioOnFirstClick(): Promise<void>;
   export function getAudioContext(): AudioContext;
+
+  /** A pattern of events. Controls such as `size` are methods, registered at load. */
+  export class Pattern {
+    /** The events in `state`'s span. Throws what the pattern throws, where `queryArc` logs it. */
+    query(state: State): ReadonlyArray<unknown>;
+    /** Registers the pattern under `id`; replaced by the repl on every evaluate. */
+    p: (this: Pattern, id: unknown) => Pattern;
+    /** Plays the pattern on the repl's scheduler. */
+    play: (this: Pattern) => Pattern;
+  }
+  /** What a query asks for: a span of cycles. */
+  export interface State {
+    readonly span: TimeSpan;
+  }
+  export const State: new (span: TimeSpan) => State;
+  export interface TimeSpan {
+    readonly begin: unknown;
+    readonly end: unknown;
+  }
+  export const TimeSpan: new (begin: number, end: number) => TimeSpan;
+  export const silence: Pattern;
+  export function stack(...patterns: ReadonlyArray<Pattern>): Pattern;
+  export function isPattern(value: unknown): value is Pattern;
+  /** Whether `name` is a registered control or one of its synonyms. */
+  export function isControlName(name: string): boolean;
+  /** Turns Strudel code into JavaScript: strings to mini-notation, labels to `.p(label)`. */
+  export function transpiler(
+    code: string,
+    options?: Record<string, unknown>,
+  ): { readonly output: string };
+  /** The playing pattern, as last handed to the scheduler. */
+  export function getPattern(): Pattern | undefined;
 }

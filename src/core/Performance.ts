@@ -42,10 +42,10 @@ export interface Preamble {
 /** The first 8 hex chars of SHA-256 over a unit's exact text (CONTEXT.md). */
 export type Rev = string;
 
-const revOf = (text: string): Rev => bytesToHex(sha256(utf8ToBytes(text))).slice(0, 8);
+export const revOf = (text: string): Rev => bytesToHex(sha256(utf8ToBytes(text))).slice(0, 8);
 
 /** Parses as Strudel 1.2.6's transpiler does. */
-const parseOptions = { ecmaVersion: 2022, allowAwaitOutsideFunction: true } as const;
+export const parseOptions = { ecmaVersion: 2022, allowAwaitOutsideFunction: true } as const;
 
 export const parsePerformance = (source: string): Performance => {
   const { program, comments } = parseSource(source);

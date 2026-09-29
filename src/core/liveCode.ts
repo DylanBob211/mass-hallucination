@@ -1,4 +1,4 @@
-import type { Part, Performance } from "./Performance";
+import { type Part, type Performance, parsePerformance, revOf, type Segment } from "./Performance";
 
 /**
  * What is actually running (CONTEXT.md): per Part identity, and for the Preamble, the text as of
@@ -91,3 +91,52 @@ export const deleted = (performance: Performance, live: LiveCode): Array<[string
 /** Written but not yet running (CONTEXT.md): its current text is not its Live code. */
 export const isUnapplied = (part: Part, live: LiveCode): boolean =>
   live.parts.get(part.id) !== part.text;
+
+/**
+ * The Performance once `texts` are written, each keyed by a Part's identity or by `preambleId`: a
+ * Part's text replaces it where it stands, a new Part goes at the end, and the Preamble's text
+ * replaces all its segments, where the first one stood (or at the top). A text keeps its key as
+ * its identity even when its label says otherwise.
+ */
+export const withTexts = (
+  performance: Performance,
+  texts: ReadonlyMap<string, string>,
+): Performance => {
+  const preamble = texts.get(preambleId);
+  const layout: Array<Segment> = [];
+  let preamblePlaced = preamble === undefined;
+  for (const segment of performance.layout) {
+    if ("part" in segment) {
+      const text = texts.get(segment.part.id);
+      layout.push(text === undefined ? segment : { part: partOf(segment.part.id, text) });
+    } else if (preamble === undefined) {
+      layout.push(segment);
+    } else if (!preamblePlaced) {
+      preamblePlaced = true;
+      if (preamble.trim() !== "") layout.push({ preamble: preamble.trim() });
+    }
+  }
+  if (preamble !== undefined && !preamblePlaced && preamble.trim() !== "")
+    layout.unshift({ preamble: preamble.trim() });
+  for (const [id, text] of texts)
+    if (id !== preambleId && !performance.parts.some((part) => part.id === id))
+      layout.push({ part: partOf(id, text) });
+  const parts = layout.flatMap((segment) => ("part" in segment ? [segment.part] : []));
+  const preambleText = layout
+    .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
+    .join("\n");
+  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
+};
+
+/** The Part `text` makes, addressed as `id`. */
+const partOf = (id: string, text: string): Part => {
+  const parsed = parsePerformance(text).parts[0];
+  return {
+    muted: parsed?.muted ?? false,
+    soloed: parsed?.soloed ?? false,
+    surface: parsed?.surface ?? "audio",
+    id,
+    text,
+    rev: revOf(text),
+  };
+};
