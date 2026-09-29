@@ -18,7 +18,56 @@
     "skipLibCheck": true,
     "plugins": [
       {
-        "name": "@effect/language-service"
+        "name": "@effect/language-service",
+        "ignoreEffectErrorsInTscExitCode": false,
+        "ignoreEffectWarningsInTscExitCode": false,
+        "diagnosticSeverity": {
+          "runEffectInsideEffect": "error",
+          "returnEffectInGen": "error",
+          "nestedEffectGenYield": "error",
+          "effectInFailure": "error",
+          "effectInVoidSuccess": "error",
+          "anyUnknownInErrorContext": "error",
+          "unsafeEffectTypeAssertion": "error",
+          "tryCatchInEffectGen": "error",
+          "abortControllerInEffect": "error",
+          "strictEffectProvide": "error",
+          "globalDateInEffect": "error",
+          "globalTimersInEffect": "error",
+          "globalRandomInEffect": "error",
+          "globalConsoleInEffect": "error",
+          "globalFetchInEffect": "error",
+          "cryptoRandomUUIDInEffect": "error",
+          "processEnvInEffect": "error"
+        },
+        "overrides": [
+          {
+            "include": ["src/core/**/*"],
+            "exclude": ["src/**/*.test.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "globalDate": "error",
+                "globalTimers": "error",
+                "globalRandom": "error",
+                "globalConsole": "error",
+                "globalFetch": "error",
+                "cryptoRandomUUID": "error",
+                "processEnv": "error",
+                "newPromise": "error",
+                "asyncFunction": "error",
+                "extendsNativeError": "error"
+              }
+            }
+          },
+          {
+            "include": ["src/facade/**/*", "src/**/*.test.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off"
+              }
+            }
+          }
+        ]
       }
     ]
   },

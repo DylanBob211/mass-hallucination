@@ -5,7 +5,8 @@ status: accepted (POC only)
 # Svelte 5 and raw CodeMirror 6, behind a plain façade over the Effect core
 
 _Amended by ticket 08 (2026-09-29): where tests run. Amended by poc-build ticket 01 (2026-09-29):
-how the UI reads the view model. See the amendments at the end._
+how the UI reads the view model, and which Effect diagnostics fail the build. See the amendments at
+the end._
 
 **This decision covers the POC only**, like ADR 0005. The UI is a thin shell over the Effect core.
 The stack was chosen to fit what 01 and 07 demand, and the shell is kept replaceable.
@@ -124,3 +125,34 @@ const viewModel = $derived.by(() => {
   copy of state that lives in the façade.
 - **What the façade must provide.** A synchronous `viewModel` getter, and `subscribe(listener)`
   returning an unsubscribe function. Both are plain TS, so components still never import Effect.
+
+## Amendment: which Effect diagnostics fail the build (poc-build ticket 01)
+
+The toolchain above says `@effect/tsgo` makes Effect diagnostics fail the build. Its defaults do
+less than that: about two-thirds of its rules are off or only suggestions, and suggestions never
+fail `tsc`. The rules are now set in `tsconfig.json`, in three layers. Errors and warnings both fail
+the build; suggestions still do not.
+
+- **Everywhere (errors):**
+  - Effects nested in Effects: `runEffectInsideEffect`, `returnEffectInGen`,
+    `nestedEffectGenYield`, `effectInFailure`, `effectInVoidSuccess`. Running or returning an
+    Effect inside another is almost always a lost or doubled effect.
+  - Typed failures: `anyUnknownInErrorContext`, `unsafeEffectTypeAssertion`,
+    `tryCatchInEffectGen`. Failures stay typed, so the compiler shows which ones a caller must
+    handle.
+  - `abortControllerInEffect`: aborting goes through `Effect.abortSignal`, so interrupting the Turn
+    fiber cancels the SDK stream (spec §7).
+  - Ambient globals inside Effect code (the `…InEffect` rules for `Date`, timers, `Math.random`,
+    `console`, `fetch`, `crypto.randomUUID`, `process.env`). Time goes through `Clock` and
+    `Schedule`, so the Turn timeout and agent-Apply quantisation run under a test clock.
+  - `strictEffectProvide`: layers are provided once, at the entry point.
+- **In `src/core/**/*` only, tests excluded (errors):** the same globals outside Effect code
+  (`globalDate`, `globalTimers`, `globalRandom`, `globalConsole`, `globalFetch`,
+  `cryptoRandomUUID`, `processEnv`), plus `newPromise`, `asyncFunction` and `extendsNativeError`.
+  The core is Effect all the way down. Its errors are tagged, not subclasses of `Error`.
+- **Exempt from `strictEffectProvide`:** `src/facade/**/*`, which is the entry point, and
+  `*.test.ts`, where each test provides its own layers.
+
+Nothing here applies to the UI, which has no Effect code (ESLint forbids importing it outside the
+core and the façade). Override globs are tsconfig-style: `src/core/**/*` matches, a bare
+`src/core/**` does not.
