@@ -8,7 +8,7 @@ const setup = (source: string) => {
   const editor = Effect.runSync(makeFakeEditor(source));
   const strudel = Effect.runSync(makeFakeStrudel());
   const facade = createFacade(Layer.merge(editor.layer, strudel.layer));
-  return { strudel, facade };
+  return { editor, strudel, facade };
 };
 
 /** Waits out one poll of the transport on the real clock. */
@@ -58,6 +58,22 @@ describe("façade", () => {
     await nextPoll();
 
     expect(facade.viewModel.transport.started).toBe(false);
+    await facade.dispose();
+  });
+
+  it("apply(scope) applies only those Parts, and the view model shows the rest Unapplied", async () => {
+    const { editor, strudel, facade } = setup('kick: s("bd*4")\nhats: s("hh*8")');
+    await facade.apply();
+    Effect.runSync(editor.type('kick: s("bd*2")\nhats: s("hh*16")'));
+
+    await facade.apply(["hats"]);
+    await nextPoll();
+
+    expect(strudel.evaluated[1]).toBe('kick: s("bd*4")\nhats: s("hh*16")');
+    expect(facade.viewModel.parts.map((p) => [p.id, p.unapplied])).toEqual([
+      ["kick", true],
+      ["hats", false],
+    ]);
     await facade.dispose();
   });
 });

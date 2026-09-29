@@ -9,12 +9,20 @@ export interface ViewModel {
   readonly transport: Transport;
   /** The whole cycle the scheduler is in; 0 while stopped. Host machinery, not Transport. */
   readonly cycle: number;
-  /** The Source's Parts in Source order, re-derived on every edit (spec §4). */
+  /**
+   * The Source's Parts in Source order, re-derived on every edit (spec §4), then the deleted Parts
+   * still sounding.
+   */
   readonly parts: ReadonlyArray<PartView>;
 }
 
-/** A Part as the UI shows it. */
-export type PartView = Pick<Part, "id" | "muted" | "soloed" | "surface">;
+/** A Part as the UI shows it; a deleted one as its Live code plays it. */
+export interface PartView extends Pick<Part, "id" | "muted" | "soloed" | "surface"> {
+  /** Written but not yet running (CONTEXT.md), a deletion included. */
+  readonly unapplied: boolean;
+  /** Gone from the Source but still sounding, until an Apply of every Part. */
+  readonly deleted: boolean;
+}
 
 /** Whether the Performance is running, and at what tempo (CONTEXT.md). */
 export interface Transport {

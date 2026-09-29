@@ -5,8 +5,8 @@ status: accepted (POC only)
 # Svelte 5 and raw CodeMirror 6, behind a plain façade over the Effect core
 
 _Amended by ticket 08 (2026-09-29): where tests run. Amended by poc-build ticket 01 (2026-09-29):
-how the UI reads the view model, and which Effect diagnostics fail the build. See the amendments at
-the end._
+how the UI reads the view model, and which Effect diagnostics fail the build. Amended by poc-build
+ticket 04 (2026-09-30): the core holds Live code. See the amendments at the end._
 
 **This decision covers the POC only**, like ADR 0005. The UI is a thin shell over the Effect core.
 The stack was chosen to fit what 01 and 07 demand, and the shell is kept replaceable.
@@ -156,3 +156,16 @@ the build; suggestions still do not.
 Nothing here applies to the UI, which has no Effect code (ESLint forbids importing it outside the
 core and the façade). Override globs are tsconfig-style: `src/core/**/*` matches, a bare
 `src/core/**` does not.
+
+## Amendment: the core holds Live code (poc-build ticket 04)
+
+The shape above lists Live code among what Effect derives from the text, and says Effect never owns
+text. Live code can't be derived: it is what the last successful Apply evaluated, which the Source
+no longer says once the human types. Spec §4 already stores it ("nothing below is stored except each
+Part's Live code").
+
+- **The core holds it**, in `LiveCodeStore`: per Part identity and for the Preamble, and nothing
+  else. It changes only when an Apply succeeds.
+- **The Source is still the core's only copy of what the human wrote.** Live code is a record of
+  what is running, never written back to the editor.
+- Unapplied edits are still derived, by comparing the Source with Live code.

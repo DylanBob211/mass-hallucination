@@ -1,15 +1,13 @@
 import { Effect } from "effect";
-import { Editor } from "./Editor";
+import type { Scope } from "./liveCode";
+import { LiveCodeStore } from "./LiveCodeStore";
 import { Strudel } from "./Strudel";
 
 /**
- * Applies the whole Source and starts the transport if it is stopped. Until Parts exist (ticket 03)
- * the Source is evaluated as it stands rather than composed from Live code (spec §5).
+ * Applies `scope` (spec §5) and starts the transport if it is stopped. The human's Ctrl-Enter is
+ * the widest Scope, every Part.
  */
-export const apply = Effect.gen(function* () {
-  const editor = yield* Editor;
-  const strudel = yield* Strudel;
-  yield* strudel.evaluate(yield* editor.read);
-});
+export const apply = (scope: Scope = "every") =>
+  Effect.flatMap(LiveCodeStore, (store) => store.apply(scope));
 
 export const stopTransport = Effect.flatMap(Strudel, (strudel) => strudel.stop);

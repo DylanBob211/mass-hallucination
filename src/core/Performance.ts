@@ -10,7 +10,12 @@ import { parse as parseLoose } from "acorn-loose";
 export interface Performance {
   readonly parts: ReadonlyArray<Part>;
   readonly preamble: Preamble;
+  /** Every unit's text in Source order: each Part, and each segment of the Preamble. */
+  readonly layout: ReadonlyArray<Segment>;
 }
+
+/** A Part, or one non-blank stretch of Preamble between Parts, trimmed. */
+export type Segment = { readonly part: Part } | { readonly preamble: string };
 
 /** One top-level labelled statement (CONTEXT.md). */
 export interface Part {
@@ -45,8 +50,12 @@ const parseOptions = { ecmaVersion: 2022, allowAwaitOutsideFunction: true } as c
 export const parsePerformance = (source: string): Performance => {
   const { program, comments } = parseSource(source);
   const parts: Array<Part> = [];
-  const preamble: Array<string> = [];
+  const layout: Array<Segment> = [];
   let cursor = 0;
+  const addPreamble = (segment: string) => {
+    const trimmed = segment.trim();
+    if (trimmed !== "") layout.push({ preamble: trimmed });
+  };
   for (const statement of program.body) {
     if (statement.type !== "LabeledStatement") continue;
     const label = readLabel(statement.label.name);
@@ -54,17 +63,18 @@ export const parsePerformance = (source: string): Performance => {
     if (label === undefined || parts.some((part) => part.id === label.id)) continue;
     const from = leadingCommentsStart(source, comments, cursor, statement.start);
     const to = trailingCommentEnd(source, comments, codeEnd(source, comments, statement));
-    preamble.push(source.slice(cursor, from));
+    addPreamble(source.slice(cursor, from));
     const text = source.slice(from, to);
-    parts.push({ ...label, text, rev: revOf(text), surface: surfaceOf(statement) });
+    const part = { ...label, text, rev: revOf(text), surface: surfaceOf(statement) };
+    parts.push(part);
+    layout.push({ part });
     cursor = to;
   }
-  preamble.push(source.slice(cursor));
-  const preambleText = preamble
-    .map((segment) => segment.trim())
-    .filter((segment) => segment !== "")
+  addPreamble(source.slice(cursor));
+  const preambleText = layout
+    .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
     .join("\n");
-  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) } };
+  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
 };
 
 /**

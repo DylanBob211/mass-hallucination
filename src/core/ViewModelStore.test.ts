@@ -1,6 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream, SubscriptionRef, TestClock } from "effect";
+import { apply } from "./apply";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
+import type { Scope } from "./liveCode";
+import { LiveCodeStore } from "./LiveCodeStore";
 import { transportPollInterval, ViewModelStore } from "./ViewModelStore";
 import { initialViewModel, type ViewModel } from "./viewModel";
 
@@ -13,16 +16,22 @@ const withSource = (source: string) =>
     const collect = Effect.flatMap(ViewModelStore, (store) =>
       Stream.runForEach(store.changes, (vm) => SubscriptionRef.update(seen, (all) => [...all, vm])),
     );
-    const layer = ViewModelStore.layer.pipe(
-      Layer.provide(Layer.merge(editor.layer, strudel.layer)),
+    const context = yield* Layer.build(
+      ViewModelStore.layer.pipe(
+        Layer.provideMerge(LiveCodeStore.layer),
+        Layer.provideMerge(Layer.merge(editor.layer, strudel.layer)),
+      ),
     );
-    yield* Effect.forkScoped(Effect.provide(collect, layer));
+    yield* Effect.forkScoped(Effect.provide(collect, context));
     yield* TestClock.adjust(0);
     const last = Effect.map(SubscriptionRef.get(seen), (all) => all.at(-1));
     const tick = TestClock.adjust(transportPollInterval);
     /** Replaces the Source, as a human typing would, and lets the store see it. */
     const edit = (next: string) => Effect.andThen(editor.type(next), TestClock.adjust(0));
-    return { edit, strudel, seen, last, tick };
+    /** Applies `scope` and lets the store see the Live code it leaves. */
+    const applyScope = (scope?: Scope) =>
+      Effect.andThen(Effect.provide(apply(scope), context), TestClock.adjust(0));
+    return { edit, applyScope, strudel, seen, last, tick };
   });
 
 const withStore = withSource("");
@@ -104,9 +113,30 @@ Sviz: hydra\`osc().out()\``;
         const { last } = yield* withSource(seed);
 
         expect((yield* last)?.parts).toEqual([
-          { id: "kick", muted: false, soloed: false, surface: "audio" },
-          { id: "hats", muted: true, soloed: false, surface: "audio" },
-          { id: "viz", muted: false, soloed: true, surface: "visual" },
+          {
+            id: "kick",
+            muted: false,
+            soloed: false,
+            surface: "audio",
+            unapplied: true,
+            deleted: false,
+          },
+          {
+            id: "hats",
+            muted: true,
+            soloed: false,
+            surface: "audio",
+            unapplied: true,
+            deleted: false,
+          },
+          {
+            id: "viz",
+            muted: false,
+            soloed: true,
+            surface: "visual",
+            unapplied: true,
+            deleted: false,
+          },
         ]);
       }),
     );
@@ -118,8 +148,22 @@ Sviz: hydra\`osc().out()\``;
         yield* edit('kick: s("bd*4")\nSchords: note("c3")');
 
         expect((yield* last)?.parts).toEqual([
-          { id: "kick", muted: false, soloed: false, surface: "audio" },
-          { id: "chords", muted: false, soloed: true, surface: "audio" },
+          {
+            id: "kick",
+            muted: false,
+            soloed: false,
+            surface: "audio",
+            unapplied: true,
+            deleted: false,
+          },
+          {
+            id: "chords",
+            muted: false,
+            soloed: true,
+            surface: "audio",
+            unapplied: true,
+            deleted: false,
+          },
         ]);
       }),
     );
@@ -141,6 +185,8 @@ Sviz: hydra\`osc().out()\``;
           muted: false,
           soloed: false,
           surface: "audio",
+          unapplied: true,
+          deleted: false,
         });
         expect(after?.parts[0]).toBe(before?.parts[0]);
         expect(after?.parts[2]).toBe(before?.parts[2]);
@@ -154,6 +200,70 @@ Sviz: hydra\`osc().out()\``;
         yield* edit(seed.replace('"bd*4"', '"bd*2"'));
 
         expect(yield* SubscriptionRef.get(seen)).toHaveLength(1);
+      }),
+    );
+  });
+
+  describe("Unapplied edits", () => {
+    const seed = `kick: s("bd*4")
+hats: s("hh*8")`;
+
+    it.scoped("shows a Part unapplied until an Apply with it in Scope", () =>
+      Effect.gen(function* () {
+        const { edit, applyScope, last } = yield* withSource(seed);
+        yield* applyScope();
+        expect((yield* last)?.parts.map((p) => p.unapplied)).toEqual([false, false]);
+
+        yield* edit(seed.replace("hh*8", "hh*16"));
+        expect((yield* last)?.parts.map((p) => p.unapplied)).toEqual([false, true]);
+
+        yield* applyScope(["hats"]);
+        expect((yield* last)?.parts.map((p) => p.unapplied)).toEqual([false, false]);
+      }),
+    );
+
+    it.scoped("shows a deleted Part still sounding after the Source's Parts, as it plays", () =>
+      Effect.gen(function* () {
+        const { edit, applyScope, last } = yield* withSource(seed.replace("kick", "_kick"));
+        yield* applyScope();
+
+        yield* edit('hats: s("hh*8")');
+        yield* applyScope(["hats"]);
+
+        expect((yield* last)?.parts).toEqual([
+          {
+            id: "hats",
+            muted: false,
+            soloed: false,
+            surface: "audio",
+            unapplied: false,
+            deleted: false,
+          },
+          {
+            id: "kick",
+            muted: true,
+            soloed: false,
+            surface: "audio",
+            unapplied: true,
+            deleted: true,
+          },
+        ]);
+
+        yield* applyScope();
+        expect((yield* last)?.parts.map((p) => p.id)).toEqual(["hats"]);
+      }),
+    );
+
+    it.scoped("keeps a Part unapplied when its Apply fails", () =>
+      Effect.gen(function* () {
+        const { edit, applyScope, strudel, last } = yield* withSource(seed);
+        yield* applyScope();
+        yield* edit(seed.replace("hh*8", "hh*16"));
+        yield* strudel.failWith("Unexpected token");
+
+        yield* Effect.ignore(applyScope());
+
+        expect((yield* last)?.parts.map((p) => p.unapplied)).toEqual([false, true]);
       }),
     );
   });
