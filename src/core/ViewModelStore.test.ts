@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream, SubscriptionRef, TestClock } from "effect";
 import { apply } from "./apply";
+import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
 import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
@@ -19,6 +20,7 @@ const withSource = (source: string) =>
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
         Layer.provideMerge(LiveCodeStore.layer),
+        Layer.provideMerge(ErrorSlotStore.layer),
         Layer.provideMerge(Layer.merge(editor.layer, strudel.layer)),
       ),
     );
@@ -28,9 +30,9 @@ const withSource = (source: string) =>
     const tick = TestClock.adjust(transportPollInterval);
     /** Replaces the Source, as a human typing would, and lets the store see it. */
     const edit = (next: string) => Effect.andThen(editor.type(next), TestClock.adjust(0));
-    /** Applies `scope` and lets the store see the Live code it leaves. */
+    /** Applies `scope` and lets the store see what it leaves, whether it succeeds or fails. */
     const applyScope = (scope?: Scope) =>
-      Effect.andThen(Effect.provide(apply(scope), context), TestClock.adjust(0));
+      Effect.ensuring(Effect.provide(apply(scope), context), TestClock.adjust(0));
     return { edit, applyScope, strudel, seen, last, tick };
   });
 
@@ -44,6 +46,7 @@ describe("ViewModelStore", () => {
         transport: { started: false, cps: 0.5 },
         cycle: 0,
         parts: [],
+        error: undefined,
       });
       expect(yield* last).toBe(initialViewModel);
     }),
@@ -61,6 +64,7 @@ describe("ViewModelStore", () => {
         transport: { started: false, cps: 0.75 },
         cycle: 12,
         parts: [],
+        error: undefined,
       });
     }),
   );
@@ -264,6 +268,74 @@ hats: s("hh*8")`;
         yield* Effect.ignore(applyScope());
 
         expect((yield* last)?.parts.map((p) => p.unapplied)).toEqual([false, true]);
+      }),
+    );
+  });
+
+  describe("the error slot", () => {
+    const seed = `kick: s("bd*4")
+hats: s("hh*8")`;
+
+    it.scoped("shows a failed Apply's error with the Part it failed in", () =>
+      Effect.gen(function* () {
+        const { applyScope, strudel, last } = yield* withSource(seed);
+        yield* strudel.failWith("Unexpected token", (code) => code.indexOf("hh*8"));
+
+        yield* Effect.ignore(applyScope());
+
+        expect((yield* last)?.error).toEqual({
+          message: "Unexpected token",
+          phase: "eval",
+          part: "hats",
+        });
+      }),
+    );
+
+    it.scoped("is cleared by a successful Apply", () =>
+      Effect.gen(function* () {
+        const { applyScope, strudel, last } = yield* withSource(seed);
+        yield* strudel.failWith("Unexpected token");
+        yield* Effect.ignore(applyScope());
+
+        yield* strudel.succeed;
+        yield* applyScope(["kick"]);
+
+        expect((yield* last)?.error).toBeUndefined();
+      }),
+    );
+
+    it.scoped("shows an error while playing, with no Part", () =>
+      Effect.gen(function* () {
+        const { applyScope, strudel, last } = yield* withSource(seed);
+        yield* applyScope();
+
+        yield* strudel.failWhilePlaying("sound nosuchsound not found");
+        yield* TestClock.adjust(0);
+
+        expect((yield* last)?.error).toEqual({
+          message: "sound nosuchsound not found",
+          phase: "playback",
+        });
+      }),
+    );
+
+    it.scoped("shows only the newest error", () =>
+      Effect.gen(function* () {
+        const { applyScope, strudel, last } = yield* withSource(seed);
+        yield* strudel.failWhilePlaying("no time set!");
+        yield* TestClock.adjust(0);
+        yield* strudel.failWith("Unexpected token", (code) => code.indexOf("bd*4"));
+
+        yield* Effect.ignore(applyScope());
+        expect((yield* last)?.error).toEqual({
+          message: "Unexpected token",
+          phase: "eval",
+          part: "kick",
+        });
+
+        yield* strudel.failWhilePlaying("no time set!");
+        yield* TestClock.adjust(0);
+        expect((yield* last)?.error).toEqual({ message: "no time set!", phase: "playback" });
       }),
     );
   });

@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from "effect";
 import { Editor } from "./Editor";
+import { ErrorSlotStore } from "./ErrorSlotStore";
 import { deleted, isUnapplied, type LiveCode } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { type Part, type Performance, parsePerformance } from "./Performance";
@@ -23,6 +24,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
       const editor = yield* Editor;
       const strudel = yield* Strudel;
       const liveCode = yield* LiveCodeStore;
+      const errorSlot = yield* ErrorSlotStore;
       const initial = withParts(
         initialViewModel,
         parsePerformance(yield* editor.read),
@@ -56,6 +58,16 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
         Stream.runForEach(Stream.zipLatest(editor.changes, liveCode.changes), ([source, live]) =>
           publish((current) =>
             Effect.sync(() => withParts(current, parsePerformance(source), live)),
+          ),
+        ),
+      );
+
+      yield* Effect.forkScoped(
+        Stream.runForEach(errorSlot.changes, (error) =>
+          publish((current) =>
+            Effect.succeed(
+              current.error === error ? current : Object.freeze({ ...current, error }),
+            ),
           ),
         ),
       );

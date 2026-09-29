@@ -1,13 +1,14 @@
 import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { apply, stopTransport } from "../core/apply";
 import type { Editor } from "../core/Editor";
+import { ErrorSlotStore } from "../core/ErrorSlotStore";
 import type { Scope } from "../core/liveCode";
 import { LiveCodeStore } from "../core/LiveCodeStore";
 import type { Strudel } from "../core/Strudel";
 import { initialViewModel, type ViewModel } from "../core/viewModel";
 import { ViewModelStore } from "../core/ViewModelStore";
 
-export type { PartView, Transport, ViewModel } from "../core/viewModel";
+export type { ErrorSlot, PartView, Transport, ViewModel } from "../core/viewModel";
 export type { Surface } from "../core/Performance";
 export { preambleId, type Scope } from "../core/liveCode";
 
@@ -29,7 +30,11 @@ export interface Facade {
 /** The façade over the given editor and repl: live ones in the page, fakes in Node tests. */
 export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
   const runtime = ManagedRuntime.make(
-    ViewModelStore.layer.pipe(Layer.provideMerge(LiveCodeStore.layer), Layer.provideMerge(host)),
+    ViewModelStore.layer.pipe(
+      Layer.provideMerge(LiveCodeStore.layer),
+      Layer.provideMerge(ErrorSlotStore.layer),
+      Layer.provideMerge(host),
+    ),
   );
   const listeners = new Set<(viewModel: ViewModel) => void>();
   let current = initialViewModel;
@@ -55,7 +60,7 @@ export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    // An evaluation error leaves the previous code playing; the error slot (ticket 05) will show it.
+    // An evaluation error leaves the previous code playing; the view model's error slot shows it.
     apply: (scope) => runtime.runPromise(Effect.ignore(apply(scope))),
     stopTransport: () => runtime.runPromise(stopTransport),
     async dispose() {

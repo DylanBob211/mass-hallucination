@@ -7,6 +7,7 @@
   --color-fg: #e8e6e3;
   --color-dim: #8a8791;
   --color-caret: #ffcc66;
+  --color-error: #ff6b6b;
   --color-selection: rgb(255 204 102 / 0.25);
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --editor-font-size: 15px;

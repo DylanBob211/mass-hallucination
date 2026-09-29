@@ -1,7 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Either, Layer } from "effect";
 import { apply, stopTransport } from "./apply";
+import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
+import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { Strudel } from "./Strudel";
 
@@ -11,12 +13,16 @@ const setup = (source: string) =>
     const strudel = yield* makeFakeStrudel();
     // Built once, so every Apply in a test shares one Live code.
     const context = yield* Layer.build(
-      LiveCodeStore.layer.pipe(Layer.provideMerge(Layer.merge(editor.layer, strudel.layer))),
+      LiveCodeStore.layer.pipe(
+        Layer.provideMerge(ErrorSlotStore.layer),
+        Layer.provideMerge(Layer.merge(editor.layer, strudel.layer)),
+      ),
     );
     return { editor, strudel, context };
   });
 
 const currentLiveCode = Effect.flatMap(LiveCodeStore, (store) => store.current);
+const currentError = Effect.flatMap(ErrorSlotStore, (store) => store.current);
 
 const seed = `samples('github:tidalcycles/dirt-samples')
 kick: s("bd*4")
@@ -169,6 +175,62 @@ hats: s("hh*16")`;
       }),
     );
   });
+});
+
+describe("a failed Apply's Part", () => {
+  /** The Part the error slot names after an Apply of `scope` over `source` fails `at`. */
+  const failAt = (source: string, at?: (composition: string) => number, scope?: Scope) =>
+    Effect.gen(function* () {
+      const { strudel, context } = yield* setup(source);
+      yield* strudel.failWith("Unexpected token", at);
+      yield* Effect.ignore(Effect.provide(apply(scope), context));
+      return (yield* Effect.provide(currentError, context))?.part;
+    });
+
+  it.scoped("is the in-Scope Part whose text holds the offset", () =>
+    Effect.gen(function* () {
+      const part = yield* failAt(seed, (code) => code.indexOf("hh*8"));
+      expect(part).toBe("hats");
+    }),
+  );
+
+  it.scoped("is the Part at the end of the composition for an error at its very end", () =>
+    Effect.gen(function* () {
+      const part = yield* failAt(`${seed}.gain(`, (code) => code.length);
+      expect(part).toBe("hats");
+    }),
+  );
+
+  it.scoped("names the Preamble as a Scope does", () =>
+    Effect.gen(function* () {
+      const part = yield* failAt(seed, (code) => code.indexOf("samples"));
+      expect(part).toBe("(preamble)");
+    }),
+  );
+
+  it.scoped("is an out-of-Scope Part, or a deleted one, by the Live code it contributes", () =>
+    Effect.gen(function* () {
+      const { editor, strudel, context } = yield* setup(seed);
+      yield* Effect.provide(apply(), context);
+      yield* editor.type(`samples('github:tidalcycles/dirt-samples')\nhats: s("hh*16")`);
+      const partAt = (text: string) =>
+        Effect.gen(function* () {
+          yield* strudel.failWith("boom", (code) => code.indexOf(text));
+          yield* Effect.ignore(Effect.provide(apply(["hats"]), context));
+          return (yield* Effect.provide(currentError, context))?.part;
+        });
+
+      expect(yield* partAt("bd*4")).toBe("kick");
+      expect(yield* partAt("hh*16")).toBe("hats");
+    }),
+  );
+
+  it.scoped("is none when the error has no offset", () =>
+    Effect.gen(function* () {
+      const part = yield* failAt(seed);
+      expect(part).toBeUndefined();
+    }),
+  );
 });
 
 describe("stopTransport", () => {

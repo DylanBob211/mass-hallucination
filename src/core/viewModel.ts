@@ -14,6 +14,8 @@ export interface ViewModel {
    * still sounding.
    */
   readonly parts: ReadonlyArray<PartView>;
+  /** The error slot; `undefined` while empty. */
+  readonly error: ErrorSlot | undefined;
 }
 
 /** A Part as the UI shows it; a deleted one as its Live code plays it. */
@@ -22,6 +24,17 @@ export interface PartView extends Pick<Part, "id" | "muted" | "soloed" | "surfac
   readonly unapplied: boolean;
   /** Gone from the Source but still sounding, until an Apply of every Part. */
   readonly deleted: boolean;
+}
+
+/**
+ * The Performance's one error (spec §4): the latest failure, until a successful Apply clears it.
+ * `part` is the identity of the Part it came from, or the Preamble's `(preamble)`, when known.
+ */
+export interface ErrorSlot {
+  readonly message: string;
+  /** Failed at evaluate, or while playing. */
+  readonly phase: "eval" | "playback";
+  readonly part?: string;
 }
 
 /** Whether the Performance is running, and at what tempo (CONTEXT.md). */
@@ -36,4 +49,5 @@ export const initialViewModel: ViewModel = Object.freeze({
   transport: Object.freeze({ started: false, cps: 0.5 }),
   cycle: 0,
   parts: Object.freeze([]),
+  error: undefined,
 });

@@ -32,7 +32,7 @@ test(
   },
 );
 
-test("a failed evaluate is an EvalError and leaves the transport as it was", async () => {
+test("a failed evaluate is an EvalError, placed in the code, and leaves the transport as it was", async () => {
   const result = await withStrudel((strudel) =>
     Effect.gen(function* () {
       const error = yield* Effect.either(strudel.evaluate('s("bd"'));
@@ -40,6 +40,7 @@ test("a failed evaluate is an EvalError and leaves the transport as it was", asy
     }),
   );
 
-  expect(Either.isLeft(result.error)).toBe(true);
+  // The parser reaches the end of the code without the closing parenthesis.
+  expect(Either.getLeft(result.error).pipe((e) => e._tag === "Some" && e.value.offset)).toBe(6);
   expect(result.transport.started).toBe(false);
 });

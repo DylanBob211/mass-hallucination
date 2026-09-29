@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, type Stream, SubscriptionRef } from "effect";
 import { Editor } from "./Editor";
-import { compose, type LiveCode, liveCodeAfter, noLiveCode, type Scope } from "./liveCode";
+import { ErrorSlotStore } from "./ErrorSlotStore";
+import { compose, type LiveCode, liveCodeAfter, noLiveCode, type Scope, unitAt } from "./liveCode";
 import { parsePerformance } from "./Performance";
 import { type EvalError, Strudel } from "./Strudel";
 
@@ -13,7 +14,8 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
     readonly changes: Stream.Stream<LiveCode>;
     /**
      * Evaluates the Source composed for `scope` and, on success, makes the in-Scope Parts' current
-     * text their Live code. On failure the previous Live code keeps playing.
+     * text their Live code and clears the error slot. On failure the previous Live code keeps
+     * playing and the error slot names the Part that failed, when it can be found.
      */
     readonly apply: (scope: Scope) => Effect.Effect<void, EvalError>;
   }
@@ -23,6 +25,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
     Effect.gen(function* () {
       const editor = yield* Editor;
       const strudel = yield* Strudel;
+      const errorSlot = yield* ErrorSlotStore;
       const ref = yield* SubscriptionRef.make(noLiveCode);
       // One Apply at a time, so each updates the Live code it composed from.
       const lock = yield* Effect.makeSemaphore(1);
@@ -32,8 +35,19 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
           Effect.gen(function* () {
             const performance = parsePerformance(yield* editor.read);
             const live = yield* SubscriptionRef.get(ref);
-            yield* strudel.evaluate(compose(performance, live, scope));
+            const composition = compose(performance, live, scope);
+            yield* strudel.evaluate(composition.code).pipe(
+              Effect.tapError(({ message, offset }) => {
+                const part = offset === undefined ? undefined : unitAt(composition, offset);
+                return errorSlot.report(
+                  part === undefined
+                    ? { message, phase: "eval" }
+                    : { message, phase: "eval", part },
+                );
+              }),
+            );
             yield* SubscriptionRef.set(ref, liveCodeAfter(performance, live, scope));
+            yield* errorSlot.clear;
           }),
         );
 

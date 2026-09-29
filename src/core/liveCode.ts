@@ -23,27 +23,55 @@ export type Scope = "every" | ReadonlyArray<string>;
 
 const inScope = (scope: Scope, id: string) => scope === "every" || scope.includes(id);
 
+/** The transient document an Apply evaluates, and where each unit sits in it. */
+export interface Composition {
+  readonly code: string;
+  /** Where each unit's text sits in `code`, by Part identity or `preambleId`. */
+  readonly units: ReadonlyArray<{
+    readonly id: string;
+    readonly from: number;
+    readonly to: number;
+  }>;
+}
+
 /**
- * The transient document an Apply evaluates (spec §5, ADR 0002): the Source's units in order,
+ * The composition an Apply of `scope` evaluates (spec §5, ADR 0002): the Source's units in order,
  * in-Scope ones as their current text and the rest as their Live code, then the deleted Parts
  * still sounding. Never written back.
  */
-export const compose = (performance: Performance, live: LiveCode, scope: Scope): string => {
+export const compose = (performance: Performance, live: LiveCode, scope: Scope): Composition => {
   const preambleInPlace = inScope(scope, preambleId) || live.preamble === performance.preamble.text;
   // Out of Scope and diverged, the Preamble's Live code is one text with no place between Parts;
   // it goes first, where helpers must be defined before the Parts that use them.
-  const units: Array<string | undefined> = preambleInPlace ? [] : [live.preamble];
+  const units: Array<[string, string | undefined]> = preambleInPlace
+    ? []
+    : [[preambleId, live.preamble]];
   for (const segment of performance.layout) {
     if ("preamble" in segment) {
-      if (preambleInPlace) units.push(segment.preamble);
+      if (preambleInPlace) units.push([preambleId, segment.preamble]);
     } else {
       const { id, text } = segment.part;
-      units.push(inScope(scope, id) ? text : live.parts.get(id));
+      units.push([id, inScope(scope, id) ? text : live.parts.get(id)]);
     }
   }
-  if (scope !== "every") units.push(...deleted(performance, live).map(([, text]) => text));
-  return units.filter((unit) => unit !== undefined).join("\n");
+  if (scope !== "every") units.push(...deleted(performance, live));
+  let code = "";
+  const placed: Array<Composition["units"][number]> = [];
+  for (const [id, text] of units) {
+    if (text === undefined) continue;
+    if (code !== "") code += "\n";
+    placed.push({ id, from: code.length, to: code.length + text.length });
+    code += text;
+  }
+  return { code, units: placed };
 };
+
+/**
+ * The unit whose text holds `offset` in the composition. An offset just past a unit's end, where
+ * an unfinished last line is found, is that unit's.
+ */
+export const unitAt = ({ units }: Composition, offset: number): string | undefined =>
+  units.find(({ from, to }) => from <= offset && offset <= to)?.id;
 
 /** The Live code once `compose(performance, live, scope)` has evaluated successfully. */
 export const liveCodeAfter = (performance: Performance, live: LiveCode, scope: Scope): LiveCode => {
