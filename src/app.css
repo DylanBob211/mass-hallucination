@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* `static` emits every token as a CSS variable even when no utility uses it, because the
+   CodeMirror theme (src/ui/editor.ts) reads them directly. */
+@theme static {
+  --color-bg: #0c0c10;
+  --color-fg: #e8e6e3;
+  --color-dim: #8a8791;
+  --color-caret: #ffcc66;
+  --color-selection: rgb(255 204 102 / 0.25);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --editor-font-size: 15px;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}

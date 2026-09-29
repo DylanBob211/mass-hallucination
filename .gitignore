@@ -1,1 +1,8 @@
 .claude/worktrees/
+node_modules/
+dist/
+coverage/
+.vitest-attachments/
+__screenshots__/
+*.local
+.svelte-check/
