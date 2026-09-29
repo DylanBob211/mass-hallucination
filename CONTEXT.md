@@ -92,7 +92,8 @@ _Avoid_: Outdated, conflicted, invalid
 
 **Instruction**:
 What the human asks of the agent, in their own words. Every Instruction reaches the agent together
-with the Performance as it is at that moment.
+with the Performance as it is at that moment. It may be aimed at one Part, as a hint and never a
+restriction: the agent may still change any Part.
 _Avoid_: Prompt, message, command, request
 
 **Turn**:

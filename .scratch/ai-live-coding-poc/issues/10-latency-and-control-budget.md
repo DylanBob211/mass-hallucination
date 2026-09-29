@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: open
-Blocked by: 07, 09
+Blocked by: 07, 09, 14, 16
 
 ## Question
 
@@ -26,6 +26,17 @@ The brief requires the interaction to feel "fast and controlled enough to judge 
 - The call is browser-direct, so no transport hop is added.
 - The agent's explanation streams *before* the tool call. The ghost preview needs per-tool `eager_input_streaming`, which the hand-wrapped SDK can set.
 - A new Instruction interrupts the running Turn. How long interruption takes is part of the "control" half of the budget.
+
+## Carried in from 09
+
+[09](09-instruction-and-agent-state-ux.md) / [ADR 0007](../../../docs/adr/0007-instructions-at-the-cursor-state-in-one-status-line.md):
+- **Streaming is decided as the wait's UI**: the tool input streams into the editor under its Part, and the model's one-line note shows in the status line first. So "useless until complete" is not a concern for what the human sees, but **time to first streamed character** becomes a latency to budget alongside time to landing.
+- **Esc stops a Turn**, and a new Instruction supersedes it. Stop-to-quiet is the "control" number.
+- Retries show only as a count, so each one is felt purely as added latency.
+
+## Carried in from 14
+
+[14](14-hydra-in-published-strudel.md): a Hydra swap lands on the **next animation frame**, unquantised, with no black frame. The first frame after a swap can stall about 28 ms (software renderer; measure it on real hardware). The visual dry-run costs about 1.3 ms per Part. Whether an agent's *visual* Apply waits for the cycle is 16's to decide. Budget it once decided.
 
 ## Deliverable
 

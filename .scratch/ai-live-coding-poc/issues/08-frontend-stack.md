@@ -1,7 +1,7 @@
 # 08 — Frontend stack
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 01, 07
 
 ## Question
@@ -22,3 +22,25 @@ Choose the frontend stack, driven by what tickets 01 and 07 actually demand rath
 ## Deliverable
 
 An ADR recording the choice and the tiebreaker used.
+
+## Answer
+
+**Svelte 5 and raw CodeMirror 6 on Vite, behind a plain façade that is the only place Effect meets the UI.** Recorded in [ADR 0006](../../../docs/adr/0006-svelte-codemirror-behind-an-effect-facade.md).
+
+- **Framework: Svelte 5, with no SvelteKit.**
+  - Angular was rejected: its own builder fights Vite and `.env.local`, and its DI duplicates Effect's Layers.
+  - React was close. The generative-UI tiebreaker leans React, but it was judged weak because the protocols are converging on framework-agnostic formats.
+  - The Svelte MCP was explicitly *not* counted in Svelte's favour.
+- **Editor: raw CM6, without `StrudelMirror`.**
+  - **The CM document is the Source.** The core reaches it only through an `Editor` service (`read`, `write`, `changes`).
+  - An agent write is one tagged transaction, so the undo step and cursor mapping come free.
+  - Hydra later is a fixed canvas behind a transparent editor, which is Strudel's own approach, so the choice forecloses nothing.
+- **Façade.** It owns the `ManagedRuntime` and the Turn fiber, and exposes plain calls plus one immutable view model, received into a `$state.raw` that is replaced whole. Components never import Effect.
+- **Effect 3.22, pinned**, under three migration rules: no `@effect/platform`, no `Runtime<R>` or `FiberRef`, and Effect only in the core.
+- **Toolchain:**
+  - pnpm with `save-exact`.
+  - TS 7 with `@effect/tsgo` checks the code. TS 6 stays only for `svelte-check --tsgo` and typescript-eslint.
+  - ESLint (flat config) and Prettier, plus Vitest with `@effect/vitest`.
+  - Tailwind v4, with its tokens as CSS variables that the CM theme reads.
+  - Bits UI for primitives, added only when needed.
+- **Handed to 09:** focus must not leave the editor unless the performer chooses.
