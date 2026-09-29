@@ -2,6 +2,8 @@
 status: accepted (POC only)
 ---
 
+_Amended by ticket 11 (the spec): the agent keeps no memory between Instructions. See the amendment at the end._
+
 # For the POC, the agent loop runs in the browser, in Effect, behind our own Model service
 
 **This decision covers the POC only.** The POC is a throwaway tool for judging the idea. The human
@@ -30,8 +32,8 @@ It has **one implementation**, which wraps `@anthropic-ai/sdk`:
 ## Loop behaviour
 
 - **A Turn ends on the first `ok: true`.** No further model call is made. The agent's explanation
-  is the text it wrote before calling the tool. The pending `tool_result` opens the next
-  Instruction's user message, together with the fresh snapshot.
+  is the text it wrote before calling the tool. The final `tool_result` is not sent anywhere
+  (amended by ticket 11, below).
 - **A new Instruction replaces the running Turn** by interrupting its fiber. The UI also has a Stop
   button. Interrupting never undoes a change that already landed, including an Apply queued for the
   next cycle. `change_parts` is atomic, so no half-change can exist.
@@ -86,3 +88,23 @@ sandboxed iframe) and the key off the page.
 - **The build:** test Bedrock Mantle bearer-token auth before relying on it as the fallback. Two
   doc pages contradict each other on it (see
   [research 13](../../.scratch/ai-live-coding-poc/research/13-model-provider-seam.md)).
+
+## Amendment: no memory between Instructions (ticket 11)
+
+The line above once said the pending `tool_result` opens the next Instruction's user message. That
+implied one conversation growing across the session, which ADR 0007 had deferred and ticket 10's
+cache plan did not assume. Decided while writing the spec:
+
+- **Each Instruction is one fresh request:** the cached fixed prefix (tool, system prompt,
+  grounding), then one user message holding the snapshot and the Instruction.
+- **Retries inside a Turn** append the `tool_use` and its refusing `tool_result` to that Turn's
+  messages only. When the Turn ends, its transcript is discarded.
+- The agent learns what came of earlier Instructions only from the Performance in the next
+  snapshot (its code, Unapplied edits and error slot). The snapshot already holds everything the
+  four acceptance scenarios need.
+- **Cost accepted:** follow-ups that refer to an earlier Turn ("no, like before") don't work.
+  Giving the agent the session's history stays deferred past the POC.
+
+Rejected: a growing session transcript (each Turn larger and costlier, stale snapshots beside the
+fresh one) and a short recap of recent Instructions in the snapshot (the start of the deferred
+history-as-context).

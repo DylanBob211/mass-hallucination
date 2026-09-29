@@ -27,6 +27,8 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
 
 <!-- one line per closed ticket: gist + link -->
 
+- [11 — Write the POC spec](issues/11-write-poc-spec.md): **the destination: [spec.md](spec.md).** It assembles every decision into a build order, M0–M6. The human can play at M1, the agent plays scenarios 1–3 at M3, and scenario 4 lands at M5. **The agent has no memory between Instructions:** each is one fresh request with the cached prefix, the snapshot and the Instruction. Retries live only inside their Turn. This amends [ADR 0005](../../docs/adr/0005-poc-agent-loop-runs-in-the-browser.md). Nothing the build needs is left undecided.
+
 - [17 — Code over moving visuals](issues/17-screen-sharing-code-and-visuals.md): **only the Part in focus gets a solid band, and the canvas is never dimmed.** The Part in focus is the agent's target while it works, and otherwise the one under the cursor. Other lines get lighter boxes as wide as their text, and the agent's widgets sit on solid panels. Alt-H steps: all code → focus Part → none. Hidden code comes back only for a Proposal. A visual error is also a badge on its Part's label line. The scrim, side-by-side and outlined-text options were rejected. Amends [ADR 0007](../../docs/adr/0007-instructions-at-the-cursor-state-in-one-status-line.md); prototype on branch `prototype/17-code-over-visuals`.
 - [10 — Latency & control budget](issues/10-latency-and-control-budget.md): **the pass/fail line isn't agent speed, it's not disturbing the Performance.**
   - **Turn limits:** landed within 30 s for 9 in 10 Instructions, a timeout at 60 s, and at most 3 retries. Time is measured in seconds, with the Apply's cycle wait reported separately. No target for the first streamed character.
@@ -78,9 +80,7 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
 
 ## Not yet specified
 
-- **Musical context across a session** — what the agent remembers between instructions, and whether "context" is just conversation history or something structured about the performance so far. *03 narrowed this:* the Performance is a pure snapshot of now — it holds no history, and nothing the agent did last turn is recoverable from it. So whatever memory exists is a separate thing from perceived state. *05 settled the perceived half:* a fresh snapshot is pushed with every instruction, and the agent has no read tool, so memory is purely whatever the conversation history carries. *From 02:* if the loop resends a growing transcript each turn, prompt caching is the cost lever, and it is invalidated by changing `effort`, switching models mid-session, or adding/removing tools — so this question is entangled with 05 and 10. *From 04:* an open **Proposal** is state held outside the Source, so whether the agent perceives its own pending, Stale or rejected Proposals is part of the same question. *From 09:* the human gets a session log (the peek), but it is human-only; the user wants conversation history as agent context *after* the POC, to make the agent more independent.
-- **More than one landed change per instruction**: *from 05:* the first `ok` ends the agent's tool use for that instruction, because at Propose a second change silently replaces the Proposal. Accepted for now and **to be discussed again** once the POC shows whether agents want to chain. 09 found nothing that needs it: the inline Proposal shows one change.
-- **How the built POC gets judged** — "fast and controlled enough" is now defined by [10](issues/10-latency-and-control-budget.md). What remains is "beautiful and enjoyable", a creative judgment that belongs to the effort *after* this map.
+_Empty: the map is done. What remained was ruled out of scope (below)._
 
 ## Out of scope
 
@@ -99,3 +99,8 @@ The POC exists to judge whether the long-term vision (semi-autonomous AI perform
   - Queueing or other handling of concurrent Instructions beyond replace.
   - A second model provider and any switch between providers. Automatic failover is ruled out entirely.
   - **Sandboxing the dry-run and moving the key off the page.** This one is debt, not a rejection: it must happen before any untrusted input (another agent's output, shared Performances, autonomous initiative) reaches the agent.
+
+- **Ruled out of scope while writing the spec ([11](issues/11-write-poc-spec.md)):**
+  - **Memory across Instructions and a reviewable conversation.** The POC's agent sees only the snapshot, with one fresh request per Instruction ([ADR 0005](../../docs/adr/0005-poc-agent-loop-runs-in-the-browser.md) amendment). Giving it the session's history, and whether it perceives its own past Proposals, is the post-POC step towards a more independent agent.
+  - **More than one landed change per Instruction.** Fixed at one by [05](issues/05-tool-surface.md). Revisit once the POC shows whether agents want to chain.
+  - **Whether the POC is beautiful and enjoyable.** A creative judgment for the effort after this map. "Fast and controlled enough" is [10](issues/10-latency-and-control-budget.md)'s budget, and the spec checks it.

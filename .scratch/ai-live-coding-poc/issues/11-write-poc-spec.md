@@ -1,7 +1,7 @@
 # 11 — Write the POC spec
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 14, 15, 16, 17
 
 ## Question
@@ -45,3 +45,17 @@ It must be tight enough for a build cycle to start from it with no further decis
 ## Deliverable
 
 `spec.md` in this directory. When it lands, the map is done.
+
+## Answer
+
+**The spec is written: [spec.md](../spec.md).** It assembles 01–17 into a build order, with the ADRs as the normative text. It covers what the POC is and isn't, the architecture table, pins, the Performance model, Apply, the tool surface, the agent loop, the Hydra glue, the prompt-reference build step, the interaction model, instrumentation, acceptance for the four scenarios with 10's budget, the verify-first list, and the milestones.
+
+- **Earliest playable point:** the end of M1. The human live-codes Strudel through composition Apply, with no agent yet. The agent plays scenarios 1–3 at M3 and scenario 4 at M5.
+- **One missed decision was found and settled with the human: the agent has no memory between Instructions.** ADR 0005 carried the last `tool_result` into the next Instruction, which implied a session transcript. ADR 0007 had deferred history, and 10's cache plan didn't assume it. Chosen: **one fresh request per Instruction.** It holds the cached prefix, then the snapshot and the Instruction. Retries live only inside their Turn's transcript, which is discarded when the Turn ends. Recorded as an amendment to [ADR 0005](../../../docs/adr/0005-poc-agent-loop-runs-in-the-browser.md).
+- **The rest of the fog was ruled out of scope,** not missed:
+  - more than one landed change per Instruction (fixed at one, to be discussed after the POC);
+  - whether the POC is beautiful and enjoyable (the effort after this map).
+- **Defaults the spec set itself**, marked in it and free to change:
+  - a successful Apply clears the error slot;
+  - the dry-run's time cap is 250 ms;
+  - if the 5.5 models hide the pre-tool note in a `thinking` block, a `note` field on `change_parts` carries it instead.
