@@ -48,7 +48,7 @@ the rule that the agent never disturbs the Performance.
 │  ┌── Svelte shell ─────────────────────────────────────────────────────┐ │
 │  │  CodeMirror 6 (transparent) = the Source   · status line · peek      │ │
 │  └───────────────▲──────────────────────────────────┬─────────────────┘ │
-│        view model │ ($state.raw)          plain calls│                    │
+│        view model │ (subscribe)           plain calls│                    │
 │  ┌────────────────┴──── façade (plain TS) ──────────▼─────────────────┐ │
 │  │ ManagedRuntime · Turn fiber                                          │ │
 │  │ Effect core: Parser · Apply · DryRun(audio, visual) · change_parts   │ │

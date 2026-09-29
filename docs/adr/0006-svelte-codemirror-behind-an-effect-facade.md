@@ -4,7 +4,8 @@ status: accepted (POC only)
 
 # Svelte 5 and raw CodeMirror 6, behind a plain façade over the Effect core
 
-_Amended by ticket 08 (2026-09-29): where tests run. See the amendment at the end._
+_Amended by ticket 08 (2026-09-29): where tests run. Amended by poc-build ticket 01 (2026-09-29):
+how the UI reads the view model. See the amendments at the end._
 
 **This decision covers the POC only**, like ADR 0005. The UI is a thin shell over the Effect core.
 The stack was chosen to fit what 01 and 07 demand, and the shell is kept replaceable.
@@ -95,3 +96,31 @@ The stack was chosen to fit what 01 and 07 demand, and the shell is kept replace
   Vitest project, so the Node suite never starts a browser.
 - **No component tests and no end-to-end suite.** Components never import Effect and only render
   the façade's view model, which is tested in Node. The POC is throwaway.
+
+## Amendment: how the UI reads the view model (poc-build ticket 01)
+
+The shape above says the UI receives the view model "into a `$state.raw`". It doesn't. It reads the
+façade's view model directly, through Svelte's `createSubscriber`:
+
+```svelte
+const track = $derived(createSubscriber((update) => facade.subscribe(update)));
+const viewModel = $derived.by(() => {
+  track();
+  return facade.viewModel;
+});
+```
+
+- **What stays the same.** The view model is immutable and replaced whole on each update, and
+  unchanged sub-objects keep their references. Svelte never deep-proxies it, so it still
+  re-renders only what changed. This was the point of `$state.raw`, and it holds.
+- **Why not `$state.raw`.** Copying the façade's value into local state needs two things Svelte
+  warns against:
+  - Seeding it with `$state.raw(facade.viewModel)` reads a prop once at init. The compiler warns
+    `state_referenced_locally`, and `svelte-check --fail-on-warnings` fails the build.
+  - Keeping it current needs a `$effect` that assigns state from the subscription. Svelte treats
+    that as an escape hatch: the effect runs after render, so the copy lags the façade by a render.
+- **Why `createSubscriber`.** It is Svelte's own primitive for an external source. It subscribes
+  while something reads the value and unsubscribes when nothing does, so the component holds no
+  copy of state that lives in the façade.
+- **What the façade must provide.** A synchronous `viewModel` getter, and `subscribe(listener)`
+  returning an unsubscribe function. Both are plain TS, so components still never import Effect.

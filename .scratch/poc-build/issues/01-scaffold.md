@@ -23,4 +23,4 @@
 - **Run pnpm through corepack** (`packageManager` pins pnpm 10.34.6). On this machine the `pnpm` on PATH is a Windows shim.
 - `pnpm check` runs everything. Browser tests need `pnpm exec playwright install chromium` once.
 - **Effect confinement is enforced by ESLint** (`no-restricted-imports` outside `src/core/**` and `src/facade/**`).
-- **Deviation from ADR 0006's wording:** `App.svelte` reads the view model through `createSubscriber` + `$derived.by`, not a `$state.raw`. The effect is the same: the object is immutable, replaced whole and never deep-proxied. The `$state.raw` form trips Svelte's `state_referenced_locally` on the `facade` prop, and it assigns state inside `$effect`.
+- **ADR 0006 amended:** `App.svelte` reads the view model through `createSubscriber` + `$derived.by`, not a `$state.raw`. The reasons are in the ADR's amendment.
