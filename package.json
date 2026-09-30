@@ -6,10 +6,12 @@
   "packageManager": "pnpm@10.34.6",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "pnpm check:reference && vite build",
+    "build:reference": "node scripts/build-reference.ts",
+    "check:reference": "node scripts/check-reference.ts",
     "preview": "vite preview",
     "prepare": "effect-tsgo patch --typescript --force --typescript-package @typescript/native",
-    "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json && node node_modules/@typescript/native/bin/tsc -p scripts/tsconfig.json",
     "check:svelte": "svelte-check --tsgo --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -17,7 +19,7 @@
     "test": "vitest run",
     "test:node": "vitest run --project node",
     "test:browser": "vitest run --project browser",
-    "check": "pnpm typecheck && pnpm check:svelte && pnpm lint && pnpm format:check && pnpm test"
+    "check": "pnpm check:reference && pnpm typecheck && pnpm check:svelte && pnpm lint && pnpm format:check && pnpm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.129.0",

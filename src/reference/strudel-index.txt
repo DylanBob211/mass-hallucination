@@ -1,0 +1,469 @@
+Strudel functions and signals this app can call (466): name(params) =synonyms — first sentence of its docs.
+Versions: @strudel/web@1.3.0 @strudel/core@1.2.6 (codeberg.org/uzu/strudel commit f610965f4332837febe45743105da170e8b331ed)
+
+s(sound) =sound — Select a sound / sample by name.
+wt(position) =wavetablePosition — Position in the wavetable of the wavetable oscillator
+wtenv(amount) — Amount of envelope applied wavetable oscillator's position envelope
+wtattack(time) =wtatt — Attack time of the wavetable oscillator's position envelope
+wtdecay(time) =wtdec — Decay time of the wavetable oscillator's position envelope
+wtsustain(gain) =wtsus — Sustain time of the wavetable oscillator's position envelope
+wtrelease(time) =wtrel — Release time of the wavetable oscillator's position envelope
+wtrate(rate) — Rate of the LFO for the wavetable oscillator's position
+wtsync(rate) — cycle synced rate of the LFO for the wavetable oscillator's position
+wtdepth(depth) — Depth of the LFO for the wavetable oscillator's position
+wtshape(shape) — Shape of the LFO for the wavetable oscillator's position
+wtdc(dcoffset) — DC offset of the LFO for the wavetable oscillator's position
+wtskew(skew) — Skew of the LFO for the wavetable oscillator's position
+warp(amount) =wavetableWarp — Amount of warp (alteration of the waveform) to apply to the wavetable oscillator
+warpattack(time) =warpatt — Attack time of the wavetable oscillator's warp envelope
+warpdecay(time) =warpdec — Decay time of the wavetable oscillator's warp envelope
+warpsustain(gain) =warpsus — Sustain time of the wavetable oscillator's warp envelope
+warprelease(time) =warprel — Release time of the wavetable oscillator's warp envelope
+warprate(rate) — Rate of the LFO for the wavetable oscillator's warp
+warpdepth(depth) — Depth of the LFO for the wavetable oscillator's warp
+warpshape(shape) — Shape of the LFO for the wavetable oscillator's warp
+warpdc(dcoffset) — DC offset of the LFO for the wavetable oscillator's warp
+warpskew(skew) — Skew of the LFO for the wavetable oscillator's warp
+warpmode(mode) =wavetableWarpMode — Type of warp (alteration of the waveform) to apply to the wavetable oscillator.
+wtphaserand(amount) =wavetablePhaseRand — Amount of randomness of the initial phase of the wavetable oscillator.
+warpenv(amount) — Amount of envelope applied wavetable oscillator's position envelope
+warpsync(rate) — cycle synced rate of the LFO for the wavetable warp position
+source(getSource) =src — Define a custom webaudio node to use as a sound source.
+n(value) — Selects the given index from the sample map.
+note() — Plays the given note name or midi number.
+accelerate(amount) — A pattern of numbers that speed up (or slow down) samples while they play.
+velocity() =vel — Sets the velocity from 0 to 1.
+gain(amount) — Controls the gain by an exponential amount.
+postgain() — Gain applied after all effects have been processed.
+amp(amount) — Like gain, but linear.
+attack(attack) =att — Amplitude envelope attack time: Specifies how long it takes for the sound to reach its peak value, relative to the onset.
+fmh(harmonicity) — Sets the Frequency Modulation Harmonicity Ratio.
+fmi(brightness) =fm — Sets the Frequency Modulation of the synth.
+fmenv(type) — Ramp type of fm envelope.
+fmattack(time) =fmatt — Attack time for the FM envelope: time it takes to reach maximum modulation
+fmwave(wave) — Waveform of the fm modulator
+fmdecay(time) =fmdec — Decay time for the FM envelope: seconds until the sustain level is reached after the attack phase.
+fmsustain(level) =fmsus — Sustain level for the FM envelope: how much modulation is applied after the decay phase
+fmrelease(time) =fmrel — Release time for the FM envelope: how much modulation is applied after the note is released
+bank(bank) — Select the sound bank to use.
+chorus(chorus) — mix control for the chorus effect
+decay(time) =dec — Amplitude envelope decay time: the time it takes after the attack time to reach the sustain level.
+sustain(gain) =sus — Amplitude envelope sustain level: The level which is reached after attack / decay, being sustained until the offset.
+release(time) =rel — Amplitude envelope release time: The time it takes after the offset to go from sustain level to zero.
+bpf(frequency) =bandf, bp — Sets the center frequency of the band-pass filter.
+bpq(q) =bandq — Sets the band-pass q-factor (resonance).
+begin(amount) — A pattern of numbers from 0 to 1.
+end(length) — The same as .begin, but cuts off the end off each sample.
+loop(on) — Loops the sample.
+loopBegin(time) =loopb — Begin to loop at a specific point in the sample (inbetween begin and end).
+loopEnd(time) =loope — End the looping section at a specific point in the sample (inbetween begin and end).
+crush(depth) — Bit crusher effect.
+coarse(factor) — Fake-resampling for lowering the sample rate.
+tremolo(speed) =trem — Modulate the amplitude of a sound with a continuous waveform
+tremolosync(cycles) =tremsync — Modulate the amplitude of a sound with a continuous waveform
+tremolodepth(depth) =tremdepth — Depth of amplitude modulation
+tremoloskew(amount) =tremskew — Alter the shape of the modulation waveform
+tremolophase(offset) =tremphase — Alter the phase of the modulation waveform
+tremoloshape(shape) =tremshape — Shape of amplitude modulation
+drive(amount) — Filter overdrive for supported filter types
+duckorbit(orbit) =duck — Modulate the amplitude of an orbit to create a "sidechain" like effect.
+duckdepth(depth) — The amount of ducking applied to target orbit
+duckonset(time) =duckons — The time required for the ducked signal(s) to reach their lowest volume.
+duckattack(time) =duckatt — The time required for the ducked signal(s) to return to their normal volume.
+byteBeatExpression(byteBeatExpression) =bbexpr — Create byte beats with custom expressions
+byteBeatStartTime(byteBeatStartTime) =bbst — Create byte beats with custom expressions
+channels(channels) =ch — Allows you to set the output channels on the interface
+pw(pulsewidth) — Controls the pulsewidth of the pulse oscillator
+pwrate(rate) — Controls the lfo rate for the pulsewidth of the pulse oscillator
+pwsweep(sweep) — Controls the lfo sweep for the pulsewidth of the pulse oscillator
+phaser(speed) =ph — Phaser audio effect that approximates popular guitar pedals.
+phasersweep(phasersweep) =phs — The frequency sweep range of the lfo for the phaser effect.
+phasercenter(centerfrequency) =phc — The center frequency of the phaser in HZ.
+phaserdepth(depth) =phd, phasdp — The amount the signal is affected by the phaser effect.
+channel(channel) — Choose the channel the pattern is sent to in superdirt
+cut(group) — In the style of classic drum-machines, cut will stop a playing sample as soon as another samples with in same cutgroup is to be played.
+lpf(frequency) =cutoff, ctf, lp — Applies the cutoff frequency of the low-pass filter.
+lpenv(modulation) =lpe — Sets the lowpass filter envelope modulation depth.
+hpenv(modulation) =hpe — Sets the highpass filter envelope modulation depth.
+bpenv(modulation) =bpe — Sets the bandpass filter envelope modulation depth.
+lpattack(attack) =lpa — Sets the attack duration for the lowpass filter envelope.
+hpattack(attack) =hpa — Sets the attack duration for the highpass filter envelope.
+bpattack(attack) =bpa — Sets the attack duration for the bandpass filter envelope.
+lpdecay(decay) =lpd — Sets the decay duration for the lowpass filter envelope.
+hpdecay(decay) =hpd — Sets the decay duration for the highpass filter envelope.
+bpdecay(decay) =bpd — Sets the decay duration for the bandpass filter envelope.
+lpsustain(sustain) =lps — Sets the sustain amplitude for the lowpass filter envelope.
+hpsustain(sustain) =hps — Sets the sustain amplitude for the highpass filter envelope.
+bpsustain(sustain) =bps — Sets the sustain amplitude for the bandpass filter envelope.
+lprelease(release) =lpr — Sets the release time for the lowpass filter envelope.
+hprelease(release) =hpr — Sets the release time for the highpass filter envelope.
+bprelease(release) =bpr — Sets the release time for the bandpass filter envelope.
+ftype(type) — Sets the filter type.
+fanchor(center) — controls the center of the filter envelope.
+hpf(frequency) =hp, hcutoff — Applies the cutoff frequency of the high-pass filter.
+lprate(rate) — Rate of the LFO for the lowpass filter
+lpsync(rate) — Cycle-synced rate of the LFO for the lowpass filter
+lpdepth(depth) — Depth of the LFO for the lowpass filter
+lpdepthfrequency(depth) =lpdepthfreq — Depth of the LFO for the lowpass filter, in HZ
+lpshape(shape) — Shape of the LFO for the lowpass filter
+lpdc(dcoffset) — DC offset of the LFO for the lowpass filter
+lpskew(skew) — Skew of the LFO for the lowpass filter
+bprate(rate) — Rate of the LFO for the bandpass filter
+bpsync(rate) — Cycle-synced rate of the LFO for the bandpass filter
+bpdepth(depth) — Depth of the LFO for the bandpass filter
+bpdepthfrequency(depth) =bpdepthfreq — Depth of the LFO for the bandpass filter, in HZ
+bpshape(shape) — Shape of the LFO for the bandpass filter
+bpdc(dcoffset) — DC offset of the LFO for the bandpass filter
+bpskew(skew) — Skew of the LFO for the bandpass filter
+hprate(rate) — Rate of the LFO for the highpass filter
+hpsync(rate) — Cycle-synced rate of the LFO for the highpass filter
+hpdepth(depth) — Depth of the LFO for the highpass filter
+hpdepthfrequency(depth) =hpdepthfreq — Depth of the LFO for the hipass filter, in hz
+hpshape(shape) — Shape of the LFO for the highpass filter
+hpdc(dcoffset) — DC offset of the LFO for the highpass filter
+hpskew(skew) — Skew of the LFO for the highpass filter
+vib(frequency) =vibrato, v — Applies a vibrato to the frequency of the oscillator.
+noise(wet) — Adds pink noise to the mix
+vibmod(depth) =vmod — Sets the vibrato depth in semitones.
+hpq(q) =hresonance — Controls the high-pass q-value.
+lpq(q) =resonance — Controls the low-pass q-value.
+djf(cutoff) — DJ filter, below 0.5 is low pass filter, above is high pass filter.
+delay(level) — Sets the level of the delay signal.
+delayfeedback(feedback) =delayfb, dfb — Sets the level of the signal that is fed back into the delay.
+delayspeed(delayspeed) =delayt, dt — Sets the time of the delay effect.
+delaysync(cycles) =delayt, dt — Sets the time of the delay effect in cycles.
+lock(enable) — Specifies whether delaytime is calculated relative to cps.
+detune(amount) =det — Set detune for stacked voices of supported oscillators
+unison(numvoices) — Set number of stacked voices for supported oscillators
+spread(spread) — Set the stereo pan spread for supported oscillators
+dry(dry) — Set dryness of reverb.
+freq(frequency) — Set frequency of sound.
+pattack(time) =patt — Attack time of pitch envelope.
+pdecay(time) =pdec — Decay time of pitch envelope.
+prelease(time) =prel — Release time of pitch envelope
+penv(semitones) — Amount of pitch envelope.
+pcurve(type) — Curve of envelope.
+panchor(anchor) — Sets the range anchor of the envelope:
+leslie(wet) — Emulation of a Leslie speaker: speakers rotating in a wooden amplified cabinet.
+lrate(rate) — Rate of modulation / rotation for leslie effect
+lsize(meters) — Physical size of the cabinet in meters.
+label(label) — Sets the displayed text for an event on the pianoroll
+octave(octave) =oct — Sets the default octave of a synth.
+orbit(number) =o — An orbit is a global parameter context for patterns.
+bus(number) — A bus is a send which can be used for mixing patterns.
+busgain(number) =bgain — Postgain multiplier prior to sending the signal to the audio bus.
+pan(pan) — Sets position in stereo.
+chord(symbols) — The chord to voice
+dictionary(dictionaryName) — Which dictionary to use for the voicings.
+anchor(anchorNote) — The top note to align the voicing to.
+offset(shift) — Sets how the voicing is offset from the anchored position
+octaves(count) — How many octaves are voicing steps spread apart, defaults to 1
+mode(modeName) — Remove anchor note from the voicing.
+room(level) — Sets the level of reverb.
+roomlp(frequency) =rlp — Reverb lowpass starting frequency (in hertz).
+roomdim(frequency) =rdim — Reverb lowpass frequency at -60dB (in hertz).
+roomfade(seconds) =rfade — Reverb fade time (in seconds).
+iresponse(sample) =ir — Sets the sample to use as an impulse response for the reverb.
+irspeed(speed) — Sets speed of the sample for the impulse response.
+irbegin(begin) =ir — Sets the beginning of the IR response sample
+roomsize(size) =rsize, sz, size — Sets the room size of the reverb, see room.
+shape(distortion) — (Deprecated) Wave shaping distortion.
+distort(distortion, volume, type) =dist — Wave shaping distortion.
+distortvol(volume) =distvol — Postgain for waveshaping distortion.
+distorttype(type) =disttype — Type of waveshaping distortion to apply.
+compressor() — Dynamics Compressor.
+speed(speed) — Changes the speed of sample playback, i.e. a cheap way of changing pitch.
+stretch(factor) — Changes the speed of sample playback, i.e. a cheap way of changing pitch.
+unit(unit) — Used in conjunction with speed, accepts values of "r" (rate, default behavior), "c" (cycles), or "s" (seconds).
+squiz(squiz) — Made by Calum Gunn.
+vowel(vowel) — Formant filter to make things sound like vowels.
+density(density) — Noise crackle density
+clip(factor) =legato — Multiplies the duration with the given number.
+duration(seconds) =dur — Sets the duration of the event in cycles.
+color(color) =colour — Sets the color of the hap in visualizations like pianoroll or highlighting.
+adsr(time, time, gain, time) — ADSR envelope: Combination of Attack, Decay, Sustain, and Release.
+midichan(channel) — MIDI channel: Sets the MIDI channel for the event.
+midiport(port) — MIDI port: Sets the MIDI port for the event.
+midicmd(command) — MIDI command: Sends a MIDI command message.
+control(MIDI, MIDI) — MIDI control: Sends a MIDI control change message.
+ccn(MIDI) — MIDI control number: Sends a MIDI control change message.
+ccv(MIDI) — MIDI control value: Sends a MIDI control change message.
+nrpnn(nrpnn) — MIDI NRPN non-registered parameter number: Sends a MIDI NRPN non-registered parameter number message.
+nrpv(nrpv) — MIDI NRPN non-registered parameter value: Sends a MIDI NRPN non-registered parameter value message.
+progNum(program) — MIDI program number: Sends a MIDI program change message.
+sysex(id, data) — MIDI sysex: Sends a MIDI sysex message.
+sysexid(id) — MIDI sysex ID: Sends a MIDI sysex identifier message.
+sysexdata(data) — MIDI sysex data: Sends a MIDI sysex message.
+midibend(midibend) — MIDI pitch bend: Sends a MIDI pitch bend message.
+miditouch(miditouch) — MIDI key after touch: Sends a MIDI key after touch message.
+oschost(oschost) — The host to send open sound control messages to.
+oscport(oscport) — The port to send open sound control messages to.
+as(mapping) — Sets properties in a batch.
+scrub() — Allows you to scrub an audio file like a tape loop by passing values that represents the position in the audio file in the optional array syntax ex: "0.5:2", the second value controls the speed of playback
+lfo(config{control?, subControl?, rate?, depth?, depthabs?, dcoffset?, shape?, skew?, curve?, sync?, fxi?}, id) — Configures an LFO.
+env(config{control?, subControl?, depth?, depthabs?, attack?, decay?, sustain?, release?, acurve?, dcurve?, rcurve?, fxi?}, id) — Configures an envelope.
+bmod(config{bus?, control?, subControl?, depth?, depthabs?, dc?, fxi?}, id) — Modulates with the output from a given bus.
+transient(attack, sustain) — Transient shaper.
+drawLine(pattern, chars) — Intended for a debugging, drawLine renders the pattern as a string, where each character represents the same time span.
+euclid(pulses, steps) — Changes the structure of the pattern to form an Euclidean rhythm.
+euclidRot(pulses, steps, rotation) — Like euclid, but has an additional parameter for 'rotating' the resulting sequence.
+euclidLegato(pulses, steps, rotation, pat) — Similar to euclid, but each pulse is held until the next pulse, so there will be no gaps.
+euclidLegatoRot(pulses, steps, rotation) — Similar to euclid, but each pulse is held until the next pulse, so there will be no gaps, and has an additional parameter for 'rotating' the resulting sequence
+euclidish(pulses, steps, groove) =eish — A 'euclid' variant with an additional parameter that morphs the resulting rhythm from 0 (no morphing) to 1 (completely 'even').
+Pattern(query) — Create a pattern.
+withValue(func) =fmap — Returns a new pattern, with the function applied to the value of each hap.
+fmap() — see withValue
+appWhole(whole_func, func) — Assumes 'this' is a pattern of functions, and given a function to resolve wholes, applies a given pattern of values to that pattern of functions.
+appBoth(pat_val) — When this method is called on a pattern of functions, it matches its haps with those in the given pattern of values.
+appLeft(pat_val) — As with appBoth, but the whole timespan is not the intersection, but the timespan from the function of patterns that this method is called on.
+appRight(pat_val) — As with appLeft, but whole timespans are instead taken from the pattern of values, i.e. structure is preserved from the right hand/outer pattern.
+queryArc(begin, end) — Query haps inside the given time span.
+splitQueries() — Returns a new pattern, with queries split at cycle boundaries.
+withQuerySpan(func) — Returns a new pattern, where the given function is applied to the query timespan before passing it to the original pattern.
+withQueryTime(func) — As with withQuerySpan, but the function is applied to both the begin and end time of the query timespan.
+withHapSpan(func) — Similar to withQuerySpan, but the function is applied to the timespans of all haps returned by pattern queries (both part timespans, and where present, whole timespans).
+withHapTime(func) — As with withHapSpan, but the function is applied to both the begin and end time of the hap timespans.
+withHaps(func) — Returns a new pattern with the given function applied to the list of haps returned by every query.
+withHap(func) — As with withHaps, but applies the function to every hap, rather than every list of haps.
+setContext(context) — Returns a new pattern with the context field set to every hap set to the given value.
+withContext(func) — Returns a new pattern with the given function applied to the context field of every hap.
+stripContext() — Returns a new pattern with the context field of every hap set to an empty object.
+withLoc(start, end) — Returns a new pattern with the given location information added to the context of every hap.
+filterHaps(hap_test) — Returns a new Pattern, which only returns haps that meet the given test.
+filterValues(value_test) — As with filterHaps, but the function is applied to values inside haps.
+removeUndefineds() — Returns a new pattern, with haps containing undefined values removed from query results.
+onsetsOnly() — Returns a new pattern, with all haps without onsets filtered out.
+discreteOnly() — Returns a new pattern, with 'continuous' haps (those without 'whole' timespans) removed from query results.
+defragmentHaps() — Combines adjacent haps with the same value and whole.
+firstCycle(with_context=false) — Queries the pattern for the first cycle, returning Haps.
+firstCycleValues — Accessor for a list of values returned by querying the first cycle.
+showFirstCycle — More human-readable version of the firstCycleValues accessor.
+sortHapsByPart() — Returns a new pattern, which returns haps sorted in temporal order.
+layer() =apply — Layers the result of the given function(s).
+superimpose() — Superimposes the result of the given function(s) on top of the original pattern:
+log() — Writes the content of the current event to the console (visible in the side menu).
+logValues() — A simplified version of log which writes all "values" (various configurable parameters) within the event to the console (visible in the side menu).
+into() — Breaks a pattern into pieces according to the structure of a given pattern.
+arpWith() — Selects indices in in stacked notes.
+arp() — Selects indices in in stacked notes.
+add() — Assumes a pattern of numbers.
+sub() — Like add, but the given numbers are subtracted.
+mul() — Multiplies each number by the given factor.
+div() — Divides each number by the given factor.
+struct() — Applies the given structure to the pattern:
+mask() — Returns silence when mask is 0 or "~"
+reset() — Resets the pattern to the start of the cycle for each onset of the reset pattern.
+restart() — Restarts the pattern for each onset of the restart pattern.
+gap(steps) — Does absolutely nothing, but with a given metrical 'steps'
+silence — Does absolutely nothing..
+pure() — A discrete value that repeats once per cycle.
+sequenceP() — Takes a list of patterns, and returns a pattern of lists.
+stack() =polyrhythm, pr — The given items are played at the same time at the same length.
+slowcat() =cat — Concatenation: combines a list of patterns, switching between them successively, one per cycle.
+slowcatPrime(...items) — Concatenation: combines a list of patterns, switching between them successively, one per cycle.
+cat(...items) =slowcat — The given items are concatenated, where each one takes one cycle.
+arrange() — Allows to arrange multiple patterns together over multiple cycles.
+seqPLoop() — Similarly to arrange, allows you to arrange multiple patterns together over multiple cycles.
+sequence() — See fastcat
+seq() =sequence, fastcat — Like cat, but the items are crammed into one cycle.
+register(name, func, patternify) — Registers a new pattern method.
+round() — Assumes a numerical pattern.
+floor() — Assumes a numerical pattern.
+ceil() — Assumes a numerical pattern.
+toBipolar() — Assumes a numerical pattern, containing unipolar values in the range 0 ..
+fromBipolar() — Assumes a numerical pattern, containing bipolar values in the range -1 ..
+range() — Assumes a numerical pattern, containing unipolar values in the range 0 ..
+rangex() — Assumes a numerical pattern, containing unipolar values in the range 0 ..
+range2() — Assumes a numerical pattern, containing bipolar values in the range -1 ..
+ratio() — Allows dividing numbers via list notation using ":".
+compress() — Compress each cycle into the given timespan, leaving a gap
+fastGap() =fastgap — speeds up a pattern like fast, but rather than it playing multiple times as fast would it instead leaves a gap in the remaining space of the cycle.
+focus() — Similar to compress, but doesn't leave gaps, and the 'focus' can be bigger than a cycle
+ply() — The ply function repeats each event the given number of times.
+fast(factor) =density — Speed up a pattern by the given factor.
+hurry() — Both speeds up the pattern (like 'fast') and the sample playback (like 'speed').
+slow(factor) =sparsity — Slow down a pattern over the given number of cycles.
+inside() — Carries out an operation 'inside' a cycle.
+outside() — Carries out an operation 'outside' a cycle.
+lastOf(n, func) — Applies the given function every n cycles, starting from the last cycle.
+firstOf(n, func) — Applies the given function every n cycles, starting from the first cycle.
+every(n, func) — An alias for firstOf
+apply() — Like layer, but with a single function:
+cpm() — Plays the pattern at the given cycles per minute.
+early(cycles) — Nudge a pattern to start earlier in time.
+late(cycles) — Nudge a pattern to start later in time.
+zoom() — Plays a portion of a pattern, specified by the beginning and end of a time span.
+bite(number, slices) — Splits a pattern into the given number of slices, and plays them according to a pattern of slice numbers.
+linger(fraction) — Selects the given fraction of the pattern and repeats that part to fill the remainder of the cycle.
+segment(segments) =seg — Samples the pattern at a rate of n events per cycle.
+swingBy(subdivision, offset) — The function swingBy x n breaks each cycle into n slices, and then delays events in the second half of each slice by the amount x, which is relative to the size of the (half) slice.
+swing(subdivision) — Shorthand for swingBy with 1/3:
+invert() =inv — Swaps 1s and 0s in a binary pattern.
+when(binary_pat, func) — Applies the given function whenever the given pattern is in a true state.
+off(time, func) — Superimposes the function result on top of the original pattern, delayed by the given time.
+brak() — Returns a new pattern where every other cycle is played once, twice as fast, and offset in time by one quarter of a cycle.
+rev() — Reverse all cycles in a pattern.
+revv() — Reverse a whole pattern.
+pressBy() — Like press, but allows you to specify the amount by which each event is shifted.
+press() — Syncopates a rhythm, by shifting each event halfway into its timespan.
+hush() — Silences a pattern.
+palindrome() — Applies rev to a pattern every other cycle, so that the pattern alternates between forwards and backwards.
+juxBy() =juxby — Jux with adjustable stereo width.
+jux() — The jux function creates strange stereo effects, by applying a function to a pattern, but only in the right-hand channel.
+echoWith(times, time, func) =echowith, stutWith, stutwith — Superimpose and offset multiple times, applying the given function each time.
+echo(times, time, feedback) — Superimpose and offset multiple times, gradually decreasing the velocity
+stut(times, feedback, time) — Deprecated.
+plyWith(factor, func) =plywith — The plyWith function repeats each event the given number of times, applying the given function to each event.\n
+plyForEach(factor, func) =plyforeach — The plyForEach function repeats each event the given number of times, applying the given function to each event.
+iter() — Divides a pattern into a given number of subdivisions, plays the subdivisions in order, but increments the starting subdivision each cycle.
+iterBack() =iterback — Like iter, but plays the subdivisions in reverse order.
+repeatCycles() — Repeats each cycle the given number of times.
+chunk() =slowChunk, slowchunk — Divides a pattern into a given number of parts, then cycles through those parts in turn, applying the given function to each part in turn (one part per cycle).
+chunkBack() =chunkback — Like chunk, but cycles through the parts in reverse order.
+fastChunk() =fastchunk — Like chunk, but the cycles of the source pattern aren't repeated for each set of chunks.
+chunkInto() =chunkinto — Like chunk, but the function is applied to a looped subcycle of the source pattern.
+chunkBackInto() =chunkbackinto — Like chunkInto, but moves backwards through the chunks.
+ribbon(offset, cycles) =rib — Loops the pattern inside an offset for cycles.
+tag(tag) — Tags each Hap with an identifier.
+filter(test) — Filters haps using the given function
+filterWhen(test) — Filters haps by their begin time
+within(start, end, func) — Use within to apply a function to only a part of a pattern.
+pace() — Experimental
+polymeter() =pm — Experimental
+stepcat() =timeCat, timecat — 'Concatenates' patterns like fastcat, but proportional to a number of steps per cycle.
+stepalt() — Experimental
+take() — Experimental
+drop() — Experimental
+extend() — Experimental
+replicate() — Experimental
+expand() — Experimental
+contract() — Experimental
+shrink() — Experimental
+grow() — Experimental
+tour() — Experimental
+zip() — Experimental
+timecat() — Aliases for stepcat
+chop() — Cuts each sample into the given number of parts, allowing you to explore a technique known as 'granular synthesis'.
+striate() — Cuts each sample into the given number of parts, triggering progressive portions of each sample at each loop.
+loopAt() — Makes the sample fit the given number of cycles by changing the speed.
+slice() — Chops samples into the given number of slices, triggering those slices with a given pattern of slice numbers.
+onTriggerTime() — make something happen on event time uses browser timeout which is innacurate for audio tasks
+splice() — Works the same as slice, but changes the playback speed of each slice to match the duration of its step.
+fit() — Makes the sample fit its event duration.
+loopAtCps() — Makes the sample fit the given number of cycles and cps value, by changing the speed.
+ref() — exposes a custom value at query time.
+xfade() — Cross-fades between left and right from 0 to 1:
+beat() — creates a structure pattern from divisions of a cycle especially useful for creating rhythms
+morph() — Takes two binary rhythms represented as lists of 1s and 0s, and a number between 0 and 1 that morphs between them.
+soft(distortion, volume) — Soft-clipping distortion
+hard(distortion, volume) — Hard-clipping distortion
+cubic(distortion, volume) — Cubic polynomial distortion
+diode(distortion, volume) — Diode-emulating distortion
+asym(distortion, volume) — Asymmetrical diode distortion
+fold(distortion, volume) — Wavefolding distortion
+sinefold(distortion, volume) — Wavefolding distortion composed with sinusoid
+chebyshev(distortion, volume) — Distortion via Chebyshev polynomials
+parray() — Turns a list of patterns into a single pattern which outputs list-values
+partials(magnitudes) — Scale the magnitude of the harmonics of one of the core synths ('sine', 'tri', 'saw', ..)
+phases(phases) — Rotates the harmonics of one of the core synths ('sine', 'tri', 'saw', 'user', ..) by a list of phases
+FX() — Establishes an FX chain.
+worklet(src, inputs) — Creates a worklet effect.
+pick(pat, xs) — Picks patterns (or plain values) either from a list (by index) or a lookup table (by name).
+pickmod(pat, xs) — The same as pick, but if you pick a number greater than the size of the list, it wraps around, rather than sticking at the maximum value.
+pickF(pat, lookup, funcs) — pickF lets you use a pattern of numbers to pick which function to apply to another pattern.
+pickmodF(pat, lookup, funcs) — The same as pickF, but if you pick a number greater than the size of the functions list, it wraps around, rather than sticking at the maximum value.
+pickOut(pat, xs) — Similar to pick, but it applies an outerJoin instead of an innerJoin.
+pickmodOut(pat, xs) — The same as pickOut, but if you pick a number greater than the size of the list, it wraps around, rather than sticking at the maximum value.
+pickRestart(pat, xs) — Similar to pick, but the choosen pattern is restarted when its index is triggered.
+pickmodRestart(pat, xs) — The same as pickRestart, but if you pick a number greater than the size of the list, it wraps around, rather than sticking at the maximum value.
+pickReset(pat, xs) — Similar to pick, but the choosen pattern is reset when its index is triggered.
+pickmodReset(pat, xs) — The same as pickReset, but if you pick a number greater than the size of the list, it wraps around, rather than sticking at the maximum value.
+inhabit(pat, xs) =pickSqueeze — Picks patterns (or plain values) either from a list (by index) or a lookup table (by name).
+inhabitmod(pat, xs) =pickmodSqueeze — The same as inhabit, but if you pick a number greater than the size of the list, it wraps around, rather than sticking at the maximum value.
+squeeze(pat, xs) — Pick from the list of values (or patterns of values) via the index using the given pattern of integers.
+saw — A sawtooth signal between 0 and 1.
+saw2 — A sawtooth signal between -1 and 1 (like saw, but bipolar).
+isaw — A sawtooth signal between 1 and 0 (like saw, but flipped).
+isaw2 — A sawtooth signal between 1 and -1 (like saw2, but flipped).
+sine2 — A sine signal between -1 and 1 (like sine, but bipolar).
+sine — A sine signal between 0 and 1.
+cosine — A cosine signal between 0 and 1.
+cosine2 — A cosine signal between -1 and 1 (like cosine, but bipolar).
+square — A square signal between 0 and 1.
+square2 — A square signal between -1 and 1 (like square, but bipolar).
+tri — A triangle signal between 0 and 1.
+tri2 — A triangle signal between -1 and 1 (like tri, but bipolar).
+itri — An inverted triangle signal between 1 and 0 (like tri, but flipped).
+itri2 — An inverted triangle signal between -1 and 1 (like itri, but bipolar).
+time — A signal representing the cycle time.
+mousex — The mouse's x position value ranges from 0 to 1.
+mousey — The mouse's y position value ranges from 0 to 1.
+useRNG(mod) — Sets which random number generator to use.
+run() — A discrete pattern of numbers from 0 to n-1
+binary(n) — Creates a binary pattern from a number.
+binaryN(n, nBits) — Creates a binary pattern from a number, padded to n bits long.
+binaryL(n) — Creates a binary list pattern from a number.
+binaryNL(n, nBits) — Creates a binary list pattern from a number, padded to n bits long.
+randL(n) — Creates a list of random numbers of the given length
+shuffle() — Slices a pattern into the given number of parts, then plays those parts in random order.
+scramble() — Slices a pattern into the given number of parts, then plays those parts at random.
+withSeed(func, pat) — Modify a pattern by applying a function to the randomSeed control if present
+seed(n) — Change the seed for random signals.
+rand — A continuous pattern of random numbers, between 0 and 1.
+rand2 — A continuous pattern of random numbers, between -1 and 1
+brandBy(probability) — A continuous pattern of 0 or 1 (binary random), with a probability for the value being 1
+brand — A continuous pattern of 0 or 1 (binary random)
+irand(n) — A continuous pattern of random integers, between 0 and n-1.
+chooseWith(pat, xs) — Choose from the list of values (or patterns of values) using the given pattern of numbers, which should be in the range of 0..1
+chooseInWith(pat, xs) — As with {chooseWith}, but the structure comes from the chosen values, rather than the pattern you're using to choose with.
+choose(...xs) — Chooses randomly from the given list of elements.
+choose2(...xs) — As with choose, but the pattern that this method is called on should be in the range -1 ..
+chooseCycles() =randcat — Picks one of the elements at random each cycle.
+wchoose(...pairs) — Chooses randomly from the given list of elements by giving a probability to each element
+wchooseCycles() =wrandcat — Picks one of the elements at random each cycle by giving a probability to each element
+perlin — Generates a continuous pattern of perlin noise, in the range 0..1.
+berlin — Generates a continuous pattern of [berlin noise](conceived by Jame Coyne and Jade Rowland as a joke but turned out to be surprisingly cool and useful, like perlin noise but with sawtooth waves), in the range 0..1.
+degradeBy(amount) — Randomly removes events from the pattern by a given amount.
+degrade() — Randomly removes 50% of events from the pattern.
+undegradeBy(amount) — Inverse of degradeBy: Randomly removes events from the pattern by a given amount.
+undegrade() — Inverse of degrade: Randomly removes 50% of events from the pattern.
+sometimesBy(probability, function) — Randomly applies the given function by the given probability.
+sometimes(function) — Applies the given function with a 50% chance
+someCyclesBy(probability, function) — Randomly applies the given function by the given probability on a cycle by cycle basis.
+someCycles() — Shorthand for .someCyclesBy(0.5, fn)
+often() — Shorthand for .sometimesBy(0.75, fn)
+rarely() — Shorthand for .sometimesBy(0.25, fn)
+almostNever() — Shorthand for .sometimesBy(0.1, fn)
+almostAlways() — Shorthand for .sometimesBy(0.9, fn)
+never() — Shorthand for .sometimesBy(0, fn) (never calls fn)
+always() — Shorthand for .sometimesBy(1, fn) (always calls fn)
+whenKey() — Do something on a keypress, or array of keypresses Key name reference
+keyDown() — returns true when a key or array of keys is held Key name reference
+cyclesPer — A pattern measuring the duration of events, in cycles per event.
+per =perCycle — A pattern measuring the 'shortness' of events, or in other words, the duration of pattern events, in events per cycle.
+perx — Like per but measures the shortness of events according to an exponential curve.
+getFreq()
+midi2note()
+pianoroll(options, cycles, playhead, vertical, labels, flipTime, flipValues, overscan, hideNegative, smear, fold, active, inactive, background, playheadColor, fill, fillActive, stroke, strokeActive, hideInactive, colorizeInactive, fontFamily, minMidi, maxMidi, autorange) =punchcard — Visualises a pattern as a scrolling 'pianoroll', displayed in the background of the editor.
+wordfall() — Displays a vertical pianoroll with event labels.
+pitchwheel(hapcircles, circle, edo, root, thickness, hapRadius, mode, margin) — Renders a pitch circle to visualize frequencies within one octave
+spiral(options, stretch, size, thickness, cap, inset, playheadColor, playheadLength, playheadThickness, padding, steady, activeColor, inactiveColor, colorizeInactive, fade, logSpiral) — Displays a spiral visual.
+samples() — Loads a collection of samples to use with s
+setMaxPolyphony(Max) — Set the max polyphony.
+setGainCurve(function) — Apply a function to all gains provided in patterns.
+aliasBank(bank, alias) — Register an alias for a bank of sounds.
+soundAlias(original, alias) — Register an alias for a sound.
+tables() — Loads a collection of wavetables to use with s
+id()
+out()
+psustain()
+transpose(amount) =trans — Change the pitch of each value by the given amount.
+scaleTranspose(offset) =scaleTrans, strans — Transposes notes inside the scale by the number of steps.
+scale(scale) — Turns numbers into notes in the scale (zero indexed) or quantizes notes to a scale.
+addVoicings(name, dictionary, range) — Adds a new custom voicing dictionary.
+voicings(dictionary) — DEPRECATED: still works, but it is recommended you use .voicing instead (without s).
+rootNotes(octave) — Maps the chords of the incoming pattern to root notes in the given octave.
+voicing() — Turns chord symbols into voicings.
+fscope(color, scale, pos, lean, min, max) — Renders an oscilloscope for the frequency domain of the audio signal.
+scope(config, align, color, thickness, scale, pos, trigger) =tscope — Renders an oscilloscope for the time domain of the audio signal.
+spectrum(config, thickness, speed, min, max) — Renders a spectrum analyzer for the incoming audio signal.

@@ -1,0 +1,8 @@
+Strudel names not to use, and what to write instead. Hand-kept; add a line for each miss observed.
+Versions: @strudel/web@1.3.0 @strudel/core@1.2.6
+
+sidechain — does not exist. Put .duckorbit(n) (=duck) on the Part that triggers the ducking and play the ducked Part on .orbit(n); shape it with duckattack and duckdepth. e.g. $: s("bd*4").duckorbit(2).duckattack(0.2).duckdepth(1) with $: note("c2 eb2").s("sawtooth").orbit(2)
+whenmod — TidalCycles only; not in Strudel. Use every(n, f) / firstOf(n, f) / lastOf(n, f), or when with a cycle pattern: Tidal's whenmod 8 6 f is .when("<0!6 1!2>", f).
+while — not in this version of Strudel. Use when(binary_pat, f) or mask.
+size / roomsize (also rsize, sz) — one control under several names; set only one of them, or the last one set wins.
+legato / clip — one control under two names; set only one of them, or the last one set wins.
