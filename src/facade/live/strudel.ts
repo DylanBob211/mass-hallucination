@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect";
 import { EvalError, type LateNote, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
+import { createVisuals, type Visuals, VisualError } from "./visuals";
 
 /**
  * Strudel's audio output `output`, telling `onLate` how many milliseconds late each note is that
@@ -65,7 +66,7 @@ const watchSkippedTicks = (
 const boot = async (
   onEvalError: (error: unknown) => void,
   onLate: (note: LateNote) => void,
-): Promise<{ readonly repl: Repl; readonly unwatch: () => void }> => {
+): Promise<{ readonly repl: Repl; readonly visuals: Visuals; readonly unwatch: () => void }> => {
   const strudel = await import("@strudel/web");
   const currentTime = () => strudel.getAudioContext().currentTime;
   const late = (where: LateNote["where"]) => (lateBy: number) => {
@@ -76,22 +77,18 @@ const boot = async (
     // The repl takes this in place of its own output (`webaudioRepl`, research for ticket 12).
     defaultOutput: lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
   });
+  const visuals = await createVisuals(strudel.silence);
+  await strudel.evalScope({ hydra: visuals.hydra });
   // initStrudel defers audio setup (worklets included) to the first mousedown. The performer's
   // first gesture is usually a key, so send it the one it waits for.
   document.dispatchEvent(new MouseEvent("mousedown"));
   await strudel.initAudioOnFirstClick();
   // superdough's initAudio means to resume the context, but its guard is always false.
   await strudel.getAudioContext().resume();
-  return { repl, unwatch: watchSkippedTicks(repl, currentTime, late("scheduler")) };
+  return { repl, visuals, unwatch: watchSkippedTicks(repl, currentTime, late("scheduler")) };
 };
 
 const gestures = ["keydown", "pointerdown"] as const;
-
-/**
- * Where Hydra's four outputs, `render(o0)` and `update`/`afterUpdate` are reset, synchronously
- * before every evaluate (spec §5 step 2). Nothing to reset until the canvas exists (ticket 13).
- */
-const resetVisuals = () => {};
 
 /** `Strudel` over the real repl, built on the first user gesture or the first evaluate. */
 export const StrudelLive = Layer.scoped(
@@ -99,6 +96,7 @@ export const StrudelLive = Layer.scoped(
   Effect.gen(function* () {
     let booting: Promise<Repl> | undefined;
     let repl: Repl | undefined;
+    let visuals: Visuals | undefined;
     let unwatch: (() => void) | undefined;
     const lateListeners = new Set<(note: LateNote) => void>();
     // The error Strudel reported during the evaluate in flight; evaluates run one at a time.
@@ -115,7 +113,7 @@ export const StrudelLive = Layer.scoped(
           for (const listener of lateListeners) listener(note);
         },
       ).then((booted) => {
-        ({ repl, unwatch } = booted);
+        ({ repl, visuals, unwatch } = booted);
         return booted.repl;
       }));
 
@@ -137,6 +135,7 @@ export const StrudelLive = Layer.scoped(
       Effect.sync(() => {
         repl?.stop();
         unwatch?.();
+        visuals?.dispose();
       }),
     );
 
@@ -157,7 +156,7 @@ export const StrudelLive = Layer.scoped(
             // through `onEvalError` and `state.evalError`, before the promise settles.
             yield* Effect.tryPromise({
               try: () => {
-                resetVisuals();
+                visuals?.prepare(code);
                 // Empty code is the one input evaluate rejects; blank code evaluates to silence.
                 return r.evaluate(code === "" ? " " : code);
               },
@@ -235,12 +234,14 @@ export const playbackErrorOf = (line: string): string | undefined =>
 
 /**
  * An error Strudel reported while evaluating `code`, with where in `code` it failed when that can
- * be told: acorn's syntax errors carry an offset, and mini-notation errors a line. Their own
- * positions in the text are dropped, as the performer never sees the composition. Other errors
- * are thrown by the code Strudel generates, whose positions are not the composition's.
+ * be told: acorn's syntax errors carry an offset, mini-notation errors a line, and a Visual Part's
+ * errors their place in its body. Their own positions in the text are dropped, as the performer
+ * never sees the composition. Other errors are thrown by the code Strudel generates, whose
+ * positions are not the composition's.
  */
 export const evalErrorOf = (error: unknown, code: string): EvalError => {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof VisualError) return new EvalError({ message, offset: error.offset });
   if (error instanceof SyntaxError && "pos" in error && typeof error.pos === "number")
     return new EvalError({ message: message.replace(/ \(\d+:\d+\)$/, ""), offset: error.pos });
   const mini = /^\[mini\] parse error at line (\d+): (.*)$/s.exec(message);

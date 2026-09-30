@@ -6,10 +6,12 @@ export default defineConfig(({ mode }) => ({
   plugins: [tailwindcss(), svelte()],
   // @strudel/core@1.2.6 reads process.env.NODE_ENV in its errorLogger; without this it throws a
   // ReferenceError in the browser (spec §3).
-  define: { "process.env.NODE_ENV": JSON.stringify(mode) },
-  // Strudel is imported lazily, on the first gesture. Pre-bundling it up front stops Vite finding it
-  // then, re-optimising, and reloading the page under the performer's first Ctrl-Enter.
-  optimizeDeps: { include: ["@strudel/web"] },
+  // hydra-synth's `right-now` reads Node's `global`.
+  define: { "process.env.NODE_ENV": JSON.stringify(mode), global: "globalThis" },
+  // Strudel and Hydra are imported lazily, on the first gesture. Pre-bundling them up front stops
+  // Vite finding them then, re-optimising, and reloading the page under the performer's first
+  // Ctrl-Enter.
+  optimizeDeps: { include: ["@strudel/web", "hydra-synth"] },
   test: {
     projects: [
       {

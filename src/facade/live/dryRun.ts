@@ -46,7 +46,9 @@ export const evaluateDry = async (
           }
         : name === "samples"
           ? () => Promise.resolve()
-          : () => silence,
+          : name === "hydra"
+            ? () => ({ p: () => silence })
+            : () => silence,
     );
     // The eval step itself, as core runs it, with the shadowing names as parameters.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -76,7 +78,10 @@ export const evaluateDry = async (
   }
 };
 
-/** Names that act on the repl or the network; in a dry-run they are parameters that do nothing. */
+/**
+ * Names that act on the repl, the network or the canvas; in a dry-run they are parameters that do
+ * nothing.
+ */
 const shadowed = [
   "hush",
   "all",
@@ -87,6 +92,8 @@ const shadowed = [
   "setCpm",
   "samples",
   "evaluate",
+  // Visual Parts draw on the live canvas; their dry-run is Hydra's own (ticket 16).
+  "hydra",
 ] as const;
 
 export const dryRunCycles = 8;

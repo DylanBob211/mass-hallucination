@@ -1,6 +1,12 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { type Comment, type LabeledStatement, parse, type Program } from "acorn";
+import {
+  type Comment,
+  type LabeledStatement,
+  parse,
+  type Program,
+  type TaggedTemplateExpression,
+} from "acorn";
 import { parse as parseLoose } from "acorn-loose";
 
 /**
@@ -145,7 +151,7 @@ const codeEnd = (
  * - a label containing `$` is numbered rather than named, so it is no Part.
  * The identity strips those marks. `undefined` means the label addresses no Part.
  */
-const readLabel = (label: string): Pick<Part, "id" | "muted" | "soloed"> | undefined => {
+export const readLabel = (label: string): Pick<Part, "id" | "muted" | "soloed"> | undefined => {
   if (label.includes("$")) return undefined;
   const muted = label.startsWith("_") || label.endsWith("_");
   const bare = label.replace(/^_+|_+$/g, "");
@@ -156,13 +162,19 @@ const readLabel = (label: string): Pick<Part, "id" | "muted" | "soloed"> | undef
 };
 
 /** Visual when the expression is exactly a host `hydra` tagged template (ADR 0001 amendment). */
-const surfaceOf = ({ body }: LabeledStatement): Surface =>
+const surfaceOf = (statement: LabeledStatement): Surface =>
+  hydraTemplateOf(statement) === undefined ? "audio" : "visual";
+
+/** The labelled statement's expression, when it is exactly a host `hydra` tagged template. */
+export const hydraTemplateOf = ({
+  body,
+}: LabeledStatement): TaggedTemplateExpression | undefined =>
   body.type === "ExpressionStatement" &&
   body.expression.type === "TaggedTemplateExpression" &&
   body.expression.tag.type === "Identifier" &&
   body.expression.tag.name === "hydra"
-    ? "visual"
-    : "audio";
+    ? body.expression
+    : undefined;
 
 /**
  * Where a Part starts: at the first of the comments that sit alone on the lines directly above its

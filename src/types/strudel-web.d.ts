@@ -32,6 +32,8 @@ declare module "@strudel/web" {
 
   /** Builds the repl and resolves once its eval scope is loaded. */
   export function initStrudel(options?: Record<string, unknown>): Promise<Repl>;
+  /** Puts each module's exports on `globalThis`, where evaluated code finds them. */
+  export function evalScope(...modules: ReadonlyArray<Record<string, unknown>>): Promise<unknown>;
   /** Resolves once audio is initialised, which happens on the first `mousedown` on `document`. */
   export function initAudioOnFirstClick(): Promise<void>;
   export function getAudioContext(): AudioContext;
