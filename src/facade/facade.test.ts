@@ -1,6 +1,6 @@
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { hangs, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "../core/fakes";
+import { hangs, makeFakeEditor, makeFakeModel, makeFakePage, makeFakeStrudel } from "../core/fakes";
 import { revOf } from "../core/Performance";
 import { transportPollInterval } from "../core/ViewModelStore";
 import { createFacade, type ViewModel } from "./facade";
@@ -9,8 +9,9 @@ const setup = (source: string, replies: ReadonlyArray<unknown> = []) => {
   const editor = Effect.runSync(makeFakeEditor(source));
   const strudel = Effect.runSync(makeFakeStrudel());
   const model = makeFakeModel(replies);
-  const facade = createFacade(Layer.mergeAll(editor.layer, strudel.layer, model.layer));
-  return { editor, strudel, model, facade };
+  const page = Effect.runSync(makeFakePage());
+  const facade = createFacade(Layer.mergeAll(editor.layer, strudel.layer, model.layer, page.layer));
+  return { editor, strudel, model, page, facade };
 };
 
 /** Waits out one poll of the transport on the real clock. */
@@ -129,6 +130,40 @@ describe("façade", () => {
 
     expect(facade.viewModel.turns).toMatchObject([{ state: "stopped" }]);
     expect(model.aborted).toBe(1);
+    await facade.dispose();
+  });
+
+  it("downloadLog() hands over the log as JSON, each stall marked by whether a Turn ran", async () => {
+    const { strudel, page, facade } = setup('hats: s("hh*8")', [hangs]);
+    await facade.apply();
+    const before = Date.now() - 10_000;
+    Effect.runSync(page.longTask(before, 80));
+    Effect.runSync(strudel.noteLate(before + 5, 12));
+
+    const turn = facade.instruct("make the hats busier", "hats");
+    await vi.waitUntil(() => facade.viewModel.turns.at(-1)?.state === "writing");
+    // Began before Enter, ran into the Turn.
+    Effect.runSync(page.longTask(before + 9_000, 2_000));
+    Effect.runSync(strudel.noteLate(Date.now(), 30));
+    await facade.stop();
+    await turn;
+    await facade.downloadLog();
+
+    expect(page.downloads).toHaveLength(1);
+    const [{ name, text }] = page.downloads as [{ name: string; text: string }];
+    expect(name).toMatch(/^pair-formance-log-.+\.json$/);
+    const log = JSON.parse(text) as Record<string, unknown>;
+    expect(log["turns"]).toMatchObject([
+      { instruction: "make the hats busier", aim: "hats", ending: "stopped", calls: 1 },
+    ]);
+    expect(log["longTasks"]).toEqual([
+      { at: before, duration: 80, duringTurn: false },
+      { at: before + 9_000, duration: 2_000, duringTurn: true },
+    ]);
+    expect(log["lateNotes"]).toMatchObject([
+      { at: before + 5, lateBy: 12, duringTurn: false },
+      { lateBy: 30, duringTurn: true },
+    ]);
     await facade.dispose();
   });
 });

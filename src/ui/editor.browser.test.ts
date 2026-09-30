@@ -17,6 +17,7 @@ const mounted = (source: string, cursor = 0) => {
     stop: vi.fn(),
     togglePeek: vi.fn(),
     closePeek: vi.fn(() => false),
+    downloadLog: vi.fn(),
   };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
@@ -278,6 +279,17 @@ test("Ctrl-J toggles the peek, and focus stays in the editor", async () => {
   await userEvent.keyboard("{Control>}j{/Control}");
 
   expect(commands.togglePeek).toHaveBeenCalledOnce();
+  expect(view.state.doc.toString()).toBe('s("bd")');
+  expect(view.hasFocus).toBe(true);
+  view.destroy();
+});
+
+test("Alt-L downloads the instrumentation log, and focus stays in the editor", async () => {
+  const { view, commands } = mounted('s("bd")');
+
+  await userEvent.keyboard("{Alt>}l{/Alt}");
+
+  expect(commands.downloadLog).toHaveBeenCalledOnce();
   expect(view.state.doc.toString()).toBe('s("bd")');
   expect(view.hasFocus).toBe(true);
   view.destroy();

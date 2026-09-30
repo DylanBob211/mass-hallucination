@@ -28,12 +28,25 @@ export interface ToolCall {
   readonly reply: unknown;
 }
 
-/** What the model streams for a request: its text, the tool input as it grows, then the call. */
+/** Tokens a request used, as the API bills them (spec §11). */
+export interface Tokens {
+  readonly input: number;
+  readonly output: number;
+  readonly cacheRead: number;
+  readonly cacheWrite: number;
+}
+
+/**
+ * What the model streams for a request: its text, the tool input as it grows, then the call.
+ * Along the way, the tokens it has used.
+ */
 export type ModelEvent =
   | { readonly _tag: "Text"; readonly delta: string }
   /** The raw JSON of the tool input so far. */
   | { readonly _tag: "ToolInput"; readonly partial: string }
-  | ToolCall;
+  | ToolCall
+  /** The tokens used since the request's last `Usage`, so a stopped request counts too. */
+  | { readonly _tag: "Usage"; readonly tokens: Tokens };
 
 export class ModelError extends Data.TaggedError("ModelError")<{ readonly message: string }> {}
 

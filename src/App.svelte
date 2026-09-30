@@ -29,7 +29,7 @@
     />
   </div>
   <div class="relative">
-    <Peek {peek} turns={viewModel.turns} />
+    <Peek {peek} turns={viewModel.turns} downloadLog={() => void facade.downloadLog()} />
     <StatusLine {viewModel} />
   </div>
 </main>

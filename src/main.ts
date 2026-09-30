@@ -23,6 +23,7 @@ const view = createEditor("", {
     peek.toggle();
   },
   closePeek: () => peek.close(),
+  downloadLog: () => void facade.downloadLog(),
 });
 const facade = createLiveFacade(view);
 // The peek opens itself on a word answer (ADR 0007), whether or not anything renders it.

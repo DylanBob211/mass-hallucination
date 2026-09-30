@@ -21,6 +21,7 @@ const mounted = () => {
     stop: () => {},
     togglePeek: () => {},
     closePeek: () => false,
+    downloadLog: () => {},
   });
   document.body.append(view.dom);
   view.focus();

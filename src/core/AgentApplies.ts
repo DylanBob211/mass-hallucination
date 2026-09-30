@@ -22,9 +22,13 @@ export class AgentApplies extends Context.Tag("AgentApplies")<
     /**
      * Applies `scope` at the next cycle boundary, if its Parts still hold the texts the agent
      * `written` (see `LiveCodeStore.apply`). On a stopped transport, now or by then, it makes them
-     * Live code and starts nothing.
+     * Live code and starts nothing. `onHeard` runs once the Apply has played.
      */
-    readonly schedule: (scope: Scope, written: ReadonlyMap<string, string>) => Effect.Effect<void>;
+    readonly schedule: (
+      scope: Scope,
+      written: ReadonlyMap<string, string>,
+      onHeard?: Effect.Effect<void>,
+    ) => Effect.Effect<void>;
     /** The cycle the next waiting Apply plays at, or `undefined`: now, then on every change. */
     readonly waiting: Stream.Stream<number | undefined>;
   }
@@ -55,7 +59,11 @@ export class AgentApplies extends Context.Tag("AgentApplies")<
           }
         });
 
-      const schedule = (scope: Scope, written: ReadonlyMap<string, string>) =>
+      const schedule = (
+        scope: Scope,
+        written: ReadonlyMap<string, string>,
+        onHeard: Effect.Effect<void> = Effect.void,
+      ) =>
         Effect.gen(function* () {
           if (!(yield* strudel.transport).started)
             return yield* liveCode.setLiveCode(scope, written);
@@ -67,7 +75,11 @@ export class AgentApplies extends Context.Tag("AgentApplies")<
               Effect.flatMap((reached) =>
                 // A failed Apply leaves what played playing, and the error slot says why.
                 reached
-                  ? Effect.ignore(liveCode.apply(scope, written))
+                  ? Effect.ignore(
+                      Effect.flatMap(liveCode.apply(scope, written), (played) =>
+                        played ? onHeard : Effect.void,
+                      ),
+                    )
                   : liveCode.setLiveCode(scope, written),
               ),
               Effect.ensuring(

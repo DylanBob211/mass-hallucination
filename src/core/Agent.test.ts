@@ -12,8 +12,12 @@ import {
   hangsWriting,
   makeFakeEditor,
   makeFakeModel,
+  makeFakePage,
   makeFakeStrudel,
+  slowly,
+  tokensPerReply,
 } from "./fakes";
+import { Instrumentation } from "./Instrumentation";
 import { LiveCodeStore } from "./LiveCodeStore";
 import type { DraftChange } from "./draft";
 import { revOf } from "./Performance";
@@ -38,14 +42,16 @@ const setup = (autonomy: Autonomy, replies: ReadonlyArray<unknown>) =>
     const editor = yield* makeFakeEditor(seed);
     const strudel = yield* makeFakeStrudel();
     const model = makeFakeModel(replies);
+    const page = yield* makeFakePage();
     const context = yield* Layer.build(
       Agent.layer.pipe(
+        Layer.provideMerge(Instrumentation.layer),
         Layer.provideMerge(ProposalStore.layer),
         Layer.provideMerge(AgentApplies.layer),
         Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
         Layer.provideMerge(ErrorSlotStore.layer),
-        Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, model.layer)),
+        Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, model.layer, page.layer)),
       ),
     );
     yield* Effect.provide(apply(), context);
@@ -74,7 +80,12 @@ const setup = (autonomy: Autonomy, replies: ReadonlyArray<unknown>) =>
       ),
     );
     yield* Effect.yieldNow();
-    return { editor, strudel, model, instruct, turns, stop, reaches, drafts };
+    /** The Turns as the instrumentation log records them. */
+    const recorded = Effect.map(
+      Effect.flatMap(Effect.provide(Instrumentation, context), (i) => i.log),
+      (log) => log.turns,
+    );
+    return { editor, strudel, model, instruct, turns, stop, reaches, drafts, recorded };
   });
 
 describe("Agent", () => {
@@ -298,4 +309,106 @@ describe("Agent", () => {
       expect(next?.snapshot.source).toContain(busier);
     }),
   );
+
+  describe("the log (spec §11)", () => {
+    it.scoped("times a landed Turn from Enter to its first character and its landing", () =>
+      Effect.gen(function* () {
+        const { instruct, reaches, recorded } = yield* setup("write", [
+          slowly("2 seconds", changeHats()),
+        ]);
+        yield* TestClock.adjust("1 second");
+
+        const running = yield* Effect.fork(instruct("make the hats busier", "hats"));
+        yield* reaches("thinking");
+        yield* TestClock.adjust("2 seconds");
+        yield* Fiber.join(running);
+
+        expect(yield* recorded).toEqual([
+          {
+            instruction: "make the hats busier",
+            aim: "hats",
+            enter: 1000,
+            firstCharacter: 1000,
+            landed: 3000,
+            heard: null,
+            ended: 3000,
+            ending: "landed",
+            calls: 1,
+            retries: 0,
+            tokens: tokensPerReply,
+          },
+        ]);
+      }),
+    );
+
+    it.scoped("counts a Turn's calls and retries, and adds up the tokens of every call", () =>
+      Effect.gen(function* () {
+        const stale = changeHats(revOf('hats: s("hh*4")'));
+        const { instruct, recorded } = yield* setup("write", [stale, stale, changeHats()]);
+
+        yield* instruct("make the hats busier");
+
+        expect(yield* recorded).toMatchObject([
+          {
+            ending: "landed",
+            calls: 3,
+            retries: 2,
+            tokens: { input: 2700, output: 180, cacheRead: 36000, cacheWrite: 900 },
+          },
+        ]);
+      }),
+    );
+
+    it.scoped("records how a Turn ended that landed nothing, and when", () =>
+      Effect.gen(function* () {
+        const { instruct, stop, reaches, recorded } = yield* setup("write", [hangs, hangs]);
+        const first = yield* Effect.fork(instruct("add a bassline"));
+        yield* reaches("writing");
+        yield* TestClock.adjust("1 second");
+
+        const second = yield* Effect.fork(instruct("make the hats busier"));
+        yield* reaches("writing");
+        yield* TestClock.adjust("1 second");
+        yield* stop;
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+
+        expect(yield* recorded).toMatchObject([
+          { enter: 0, firstCharacter: 0, landed: null, ended: 1000, ending: "superseded" },
+          { enter: 1000, firstCharacter: 1000, landed: null, ended: 2000, ending: "stopped" },
+        ]);
+      }),
+    );
+
+    it.scoped("records when an agent Apply is heard, at its cycle boundary, after the Turn", () =>
+      Effect.gen(function* () {
+        const { strudel, instruct, recorded } = yield* setup("apply", [changeHats()]);
+        yield* strudel.setPosition(0.5);
+        yield* instruct("make the hats busier");
+
+        expect(yield* recorded).toMatchObject([{ landed: 0, heard: null }]);
+
+        yield* strudel.setPosition(1);
+        yield* TestClock.adjust("50 millis");
+
+        expect(yield* recorded).toMatchObject([{ landed: 0, heard: 50, ending: "landed" }]);
+        expect(strudel.evaluated).toHaveLength(2);
+      }),
+    );
+
+    it.scoped("records no heard when the human took the Part back before its Apply played", () =>
+      Effect.gen(function* () {
+        const { editor, strudel, instruct, recorded } = yield* setup("apply", [changeHats()]);
+        yield* strudel.setPosition(0.5);
+        yield* instruct("make the hats busier");
+        yield* editor.type((yield* editor.read).replace(busier, 'hats: s("hh*4")'));
+
+        yield* strudel.setPosition(1);
+        yield* TestClock.adjust("50 millis");
+
+        expect(yield* recorded).toMatchObject([{ landed: 0, heard: null }]);
+        expect(strudel.evaluated).toHaveLength(1);
+      }),
+    );
+  });
 });

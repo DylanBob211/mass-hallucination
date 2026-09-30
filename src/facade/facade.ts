@@ -5,9 +5,11 @@ import { apply, stopTransport } from "../core/apply";
 import { AutonomyStore } from "../core/AutonomyStore";
 import type { Editor } from "../core/Editor";
 import { ErrorSlotStore } from "../core/ErrorSlotStore";
+import { downloadLog, Instrumentation } from "../core/Instrumentation";
 import { preambleId, type Scope } from "../core/liveCode";
 import { LiveCodeStore } from "../core/LiveCodeStore";
 import type { Model } from "../core/Model";
+import type { Page } from "../core/Page";
 import { locate } from "../core/Performance";
 import { ProposalStore } from "../core/ProposalStore";
 import type { Strudel } from "../core/Strudel";
@@ -78,14 +80,23 @@ export interface Facade {
   instruct(instruction: string, part: string | null): Promise<void>;
   /** Stops the running Turn. A change that has landed stays. */
   stop(): Promise<void>;
+  /**
+   * Hands the performer this session's instrumentation log as a JSON file (spec §11): each
+   * Turn's timings, calls and tokens, and every long task and late note.
+   */
+  downloadLog(): Promise<void>;
   dispose(): Promise<void>;
 }
 
-/** The façade over the given editor, repl and model: live ones in the page, fakes in Node tests. */
-export const createFacade = (host: Layer.Layer<Editor | Strudel | Model>): Facade => {
+/**
+ * The façade over the given editor, repl, model and page: live ones in the page, fakes in Node
+ * tests.
+ */
+export const createFacade = (host: Layer.Layer<Editor | Strudel | Model | Page>): Facade => {
   const runtime = ManagedRuntime.make(
     ViewModelStore.layer.pipe(
       Layer.provideMerge(Agent.layer),
+      Layer.provideMerge(Instrumentation.layer),
       Layer.provideMerge(ProposalStore.layer),
       Layer.provideMerge(AgentApplies.layer),
       Layer.provideMerge(AutonomyStore.layer),
@@ -130,6 +141,7 @@ export const createFacade = (host: Layer.Layer<Editor | Strudel | Model>): Facad
     instruct: (instruction, part) =>
       runtime.runPromise(Effect.flatMap(Agent, (agent) => agent.instruct(instruction, part))),
     stop: () => runtime.runPromise(Effect.flatMap(Agent, (agent) => agent.stop)),
+    downloadLog: () => runtime.runPromise(downloadLog),
     async dispose() {
       listeners.clear();
       await runtime.runPromise(Fiber.interrupt(publishing));

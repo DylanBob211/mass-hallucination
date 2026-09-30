@@ -51,12 +51,13 @@ export type ChangePartsResult =
  * it changes is as the agent read it and holds no Unapplied edits, then dry-runs it, and lands it
  * by Autonomy. Atomic: a refusal writes, applies and schedules nothing. Once the checks pass,
  * the landing and `onLanded` run together, never interrupted between them; before that,
- * interrupting it lands nothing.
+ * interrupting it lands nothing. `onHeard` runs when an agent Apply of the change plays.
  */
 export const changeParts = (
   input: unknown,
   onLanded: (landed: Landed, warnings: ReadonlyArray<string>) => Effect.Effect<void> = () =>
     Effect.void,
+  onHeard: Effect.Effect<void> = Effect.void,
 ) =>
   Effect.gen(function* () {
     const decoded = Schema.decodeUnknownEither(ChangePartsInput)(input);
@@ -96,7 +97,9 @@ export const changeParts = (
       }
       const { warnings } = checked;
       const landed = yield* Effect.either(
-        Effect.uninterruptible(Effect.tap(land(source, changes), (how) => onLanded(how, warnings))),
+        Effect.uninterruptible(
+          Effect.tap(land(source, changes, onHeard), (how) => onLanded(how, warnings)),
+        ),
       );
       if (Either.isRight(landed)) {
         return {
@@ -110,10 +113,10 @@ export const changeParts = (
 
 /**
  * Lands checked `changes` onto `source` by Autonomy (ADR 0003): as the open Proposal, or written,
- * or written and then Applied by the agent. Fails as `SourceMoved`, landing nothing, once the
- * Source is no longer `source`.
+ * or written and then Applied by the agent, running `onHeard` once that Apply plays. Fails as
+ * `SourceMoved`, landing nothing, once the Source is no longer `source`.
  */
-const land = (source: string, changes: ReadonlyArray<PartChange>) =>
+const land = (source: string, changes: ReadonlyArray<PartChange>, onHeard: Effect.Effect<void>) =>
   Effect.gen(function* () {
     const autonomy = yield* (yield* AutonomyStore).current;
     if (autonomy === "propose") {
@@ -123,7 +126,7 @@ const land = (source: string, changes: ReadonlyArray<PartChange>) =>
     const texts = new Map(changes.map(({ part, text }) => [part, text]));
     yield* (yield* Editor).write(source, writeTexts(source, texts));
     if (autonomy === "write") return "written" as const;
-    yield* (yield* AgentApplies).schedule([...texts.keys()], texts);
+    yield* (yield* AgentApplies).schedule([...texts.keys()], texts, onHeard);
     return "applied" as const;
   });
 

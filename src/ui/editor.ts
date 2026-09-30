@@ -42,6 +42,8 @@ export interface EditorCommands extends ProposalCommands, InstructionCommands {
   togglePeek(): void;
   /** Closes the peek; `false` if it was closed already. */
   closePeek(): boolean;
+  /** Hands the performer the instrumentation log to save (spec §11). */
+  downloadLog(): void;
 }
 
 const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
@@ -78,6 +80,14 @@ const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyAr
         key: "Ctrl-j",
         run: () => {
           commands.togglePeek();
+          return true;
+        },
+      },
+      {
+        // The peek's download control, as a key (ADR 0007).
+        key: "Alt-l",
+        run: () => {
+          commands.downloadLog();
           return true;
         },
       },

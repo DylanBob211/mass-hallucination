@@ -1,6 +1,6 @@
 import { parse } from "acorn";
 import { describe, expect, it } from "vitest";
-import { evalErrorOf, playbackErrorOf } from "./strudel";
+import { evalErrorOf, lateAtOutput, playbackErrorOf } from "./strudel";
 
 describe("evalErrorOf", () => {
   it("takes a syntax error's offset, and drops its position in the composition", () => {
@@ -48,5 +48,28 @@ describe("playbackErrorOf", () => {
   it("ignores every other log line, evaluate errors included", () => {
     expect(playbackErrorOf("[eval] error: Unexpected token")).toBeUndefined();
     expect(playbackErrorOf("[eval] code updated")).toBeUndefined();
+  });
+});
+
+describe("lateAtOutput", () => {
+  it("passes every note on to the output, telling of each that came after its time", () => {
+    const played: Array<number> = [];
+    const late: Array<number> = [];
+    let now = 10;
+    const output = lateAtOutput(
+      (_hap, _deadline, _duration, _cps, time) => {
+        played.push(time);
+      },
+      () => now,
+      (lateBy) => late.push(lateBy),
+    );
+
+    output({}, 0.1, 0.25, 0.5, 10.1);
+    now = 10.2;
+    output({}, 0, 0.25, 0.5, 10.15);
+
+    expect(played).toEqual([10.1, 10.15]);
+    expect(late).toHaveLength(1);
+    expect(late[0]).toBeCloseTo(50);
   });
 });

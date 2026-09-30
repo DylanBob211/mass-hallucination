@@ -5,7 +5,8 @@ import { AgentApplies } from "../../core/AgentApplies";
 import { apply } from "../../core/apply";
 import { AutonomyStore } from "../../core/AutonomyStore";
 import { ErrorSlotStore } from "../../core/ErrorSlotStore";
-import { makeFakeEditor, makeFakeStrudel } from "../../core/fakes";
+import { makeFakeEditor, makeFakePage, makeFakeStrudel } from "../../core/fakes";
+import { Instrumentation } from "../../core/Instrumentation";
 import { LiveCodeStore } from "../../core/LiveCodeStore";
 import { Model } from "../../core/Model";
 import { ProposalStore } from "../../core/ProposalStore";
@@ -34,14 +35,18 @@ chords: note("<c3 eb3 g3 bb3>").s("sawtooth").lpf(800)`;
 const performance = Effect.gen(function* () {
   const editor = yield* makeFakeEditor(seed);
   const strudel = yield* makeFakeStrudel();
+  const page = yield* makeFakePage();
   const context = yield* Layer.build(
     Agent.layer.pipe(
+      Layer.provideMerge(Instrumentation.layer),
       Layer.provideMerge(ProposalStore.layer),
       Layer.provideMerge(AgentApplies.layer),
       Layer.provideMerge(AutonomyStore.layer),
       Layer.provideMerge(LiveCodeStore.layer),
       Layer.provideMerge(ErrorSlotStore.layer),
-      Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, anthropicModel(config))),
+      Layer.provideMerge(
+        Layer.mergeAll(editor.layer, strudel.layer, anthropicModel(config), page.layer),
+      ),
     ),
   );
   yield* Effect.provide(apply(), context);

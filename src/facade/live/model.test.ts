@@ -189,7 +189,9 @@ describe("anthropicModel", () => {
     Effect.gen(function* () {
       const events = yield* streamed(fakeFetch([toolReply]));
 
-      expect(events.filter((e) => e._tag !== "ToolCall")).toEqual<Array<ModelEvent>>([
+      expect(events.filter((e) => e._tag !== "ToolCall" && e._tag !== "Usage")).toEqual<
+        Array<ModelEvent>
+      >([
         { _tag: "Text", delta: "Doubling " },
         { _tag: "Text", delta: "the hats." },
         { _tag: "ToolInput", partial: '{"changes":[' },
@@ -197,6 +199,38 @@ describe("anthropicModel", () => {
       ]);
       expect(events.at(-1)).toMatchObject({ _tag: "ToolCall", input });
     }),
+  );
+
+  it.effect(
+    "reports the tokens the reply used as the API counts them, each time since the last",
+    () =>
+      Effect.gen(function* () {
+        const [, ...rest] = textReply("Nothing to change.");
+        const cached = event({
+          type: "message_start",
+          message: {
+            id: "msg_1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-5-5",
+            content: [],
+            stop_reason: null,
+            usage: {
+              input_tokens: 900,
+              output_tokens: 2,
+              cache_read_input_tokens: 12000,
+              cache_creation_input_tokens: 300,
+            },
+          },
+        });
+
+        const events = yield* streamed(fakeFetch([[cached, ...rest]]));
+
+        expect(events.filter((e) => e._tag === "Usage")).toEqual<Array<ModelEvent>>([
+          { _tag: "Usage", tokens: { input: 900, output: 2, cacheRead: 12000, cacheWrite: 300 } },
+          { _tag: "Usage", tokens: { input: 0, output: 3, cacheRead: 0, cacheWrite: 0 } },
+        ]);
+      }),
   );
 
   it.effect("sends a retry as the model's whole reply, then the refusal as the call's result", () =>

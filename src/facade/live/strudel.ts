@@ -1,23 +1,88 @@
 import type { Repl } from "@strudel/web";
 import { Effect, Layer, Stream } from "effect";
-import { EvalError, Strudel } from "../../core/Strudel";
+import { EvalError, type LateNote, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
 
 /**
- * Loads `@strudel/web` from the bundle and builds its repl. Browsers keep audio suspended until
- * the page has had a user gesture, so this runs only after one.
+ * Strudel's audio output `output`, telling `onLate` how many milliseconds late each note is that
+ * reaches it after its time on the audio clock, which superdough drops (spec §11).
  */
-const boot = async (onEvalError: (error: unknown) => void): Promise<Repl> => {
+export const lateAtOutput =
+  (
+    output: (
+      hap: unknown,
+      deadline: number,
+      duration: number,
+      cps: number,
+      time: number,
+    ) => unknown,
+    currentTime: () => number,
+    onLate: (lateBy: number) => void,
+  ) =>
+  (hap: unknown, deadline: number, duration: number, cps: number, time: number) => {
+    const now = currentTime();
+    if (time < now) onLate((now - time) * 1000);
+    return output(hap, deadline, duration, cps, time);
+  };
+
+/** What Strudel's scheduler logs, and all it does, when it drops a tick it reached too late. */
+const skippedTick = "skip query: too late";
+
+/**
+ * Tells `onLate` of each note in a tick `repl`'s scheduler drops, and how many milliseconds late
+ * it reached the tick, until the returned function is called. A stall of the main thread longer
+ * than the scheduler looks ahead (about 200 ms) makes it drop whole ticks before they reach the
+ * output, which `lateAtOutput` never sees (spike, ticket 12). Strudel only logs the drop, so this
+ * listens to the console.
+ */
+const watchSkippedTicks = (
+  repl: Repl,
+  currentTime: () => number,
+  onLate: (lateBy: number) => void,
+) => {
+  const log = console.log;
+  console.log = (...args: Array<unknown>) => {
+    if (args[0] === skippedTick) {
+      // The scheduler has set the tick's time and cycles already.
+      const { lastTick, lastBegin, lastEnd, pattern } = repl.scheduler;
+      const lateBy = (currentTime() - lastTick) * 1000;
+      for (const hap of pattern?.queryArc(lastBegin, lastEnd) ?? [])
+        if (hap.hasOnset()) onLate(lateBy);
+    }
+    log(...args);
+  };
+  return () => {
+    console.log = log;
+  };
+};
+
+/**
+ * Loads `@strudel/web` from the bundle and builds its repl. Browsers keep audio suspended until
+ * the page has had a user gesture, so this runs only after one. Each late note goes to `onLate`
+ * until `unwatch` is called.
+ */
+const boot = async (
+  onEvalError: (error: unknown) => void,
+  onLate: (note: LateNote) => void,
+): Promise<{ readonly repl: Repl; readonly unwatch: () => void }> => {
   const strudel = await import("@strudel/web");
-  const repl = await strudel.initStrudel({ onEvalError });
+  const currentTime = () => strudel.getAudioContext().currentTime;
+  const late = (where: LateNote["where"]) => (lateBy: number) => {
+    onLate({ at: Date.now(), lateBy, where });
+  };
+  const repl = await strudel.initStrudel({
+    onEvalError,
+    // The repl takes this in place of its own output (`webaudioRepl`, research for ticket 12).
+    defaultOutput: lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
+  });
   // initStrudel defers audio setup (worklets included) to the first mousedown. The performer's
   // first gesture is usually a key, so send it the one it waits for.
   document.dispatchEvent(new MouseEvent("mousedown"));
   await strudel.initAudioOnFirstClick();
   // superdough's initAudio means to resume the context, but its guard is always false.
   await strudel.getAudioContext().resume();
-  return repl;
+  return { repl, unwatch: watchSkippedTicks(repl, currentTime, late("scheduler")) };
 };
 
 const gestures = ["keydown", "pointerdown"] as const;
@@ -34,6 +99,8 @@ export const StrudelLive = Layer.scoped(
   Effect.gen(function* () {
     let booting: Promise<Repl> | undefined;
     let repl: Repl | undefined;
+    let unwatch: (() => void) | undefined;
+    const lateListeners = new Set<(note: LateNote) => void>();
     // The error Strudel reported during the evaluate in flight; evaluates run one at a time.
     let reported: { error: unknown } | undefined;
     const takeReported = () => {
@@ -42,9 +109,14 @@ export const StrudelLive = Layer.scoped(
       return taken;
     };
     const start = () =>
-      (booting ??= boot((error) => (reported = { error })).then((booted) => {
-        repl = booted;
-        return booted;
+      (booting ??= boot(
+        (error) => (reported = { error }),
+        (note) => {
+          for (const listener of lateListeners) listener(note);
+        },
+      ).then((booted) => {
+        ({ repl, unwatch } = booted);
+        return booted.repl;
       }));
 
     // Capture, so a Ctrl-Enter that CodeMirror handles still counts.
@@ -61,7 +133,12 @@ export const StrudelLive = Layer.scoped(
       }),
       () => Effect.sync(removeGestureListeners),
     );
-    yield* Effect.addFinalizer(() => Effect.sync(() => repl?.stop()));
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        repl?.stop();
+        unwatch?.();
+      }),
+    );
 
     const booted = Effect.tryPromise({
       try: start,
@@ -110,6 +187,16 @@ export const StrudelLive = Layer.scoped(
       ),
       position: Effect.sync(() => repl?.scheduler.now() ?? 0),
       playbackErrors,
+      lateNotes: Stream.asyncPush<LateNote>((emit) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const listener = (note: LateNote) => void emit.single(note);
+            lateListeners.add(listener);
+            return listener;
+          }),
+          (listener) => Effect.sync(() => lateListeners.delete(listener)),
+        ),
+      ),
     };
   }),
 );

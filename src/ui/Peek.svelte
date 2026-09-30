@@ -2,7 +2,11 @@
   import type { TurnView } from "../facade/facade";
   import type { PeekState } from "./peekState.svelte";
 
-  let { peek, turns }: { peek: PeekState; turns: ReadonlyArray<TurnView> } = $props();
+  let {
+    peek,
+    turns,
+    downloadLog,
+  }: { peek: PeekState; turns: ReadonlyArray<TurnView>; downloadLog: () => void } = $props();
 
   const popup = (list: HTMLElement) => {
     // Clicking it keeps focus in the editor (ADR 0007).
@@ -28,6 +32,15 @@
     aria-label="this session's Instructions"
     {@attach popup}
   >
+    <!-- The same as Alt-L (ADR 0007); clicking it keeps focus in the editor. -->
+    <button
+      type="button"
+      class="float-right text-dim hover:text-fg"
+      title="The instrumentation log, as JSON (spec §11)"
+      onclick={downloadLog}
+    >
+      download log (Alt-L)
+    </button>
     {#if turns.length === 0}
       <p class="text-dim">No Instructions yet. Ctrl-K asks the agent.</p>
     {:else}

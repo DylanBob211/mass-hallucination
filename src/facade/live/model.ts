@@ -1,6 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Effect, Layer, Option, Stream } from "effect";
-import { Model, ModelError, type ModelEvent, type ModelRequest } from "../../core/Model";
+import {
+  Model,
+  ModelError,
+  type ModelEvent,
+  type ModelRequest,
+  type Tokens,
+} from "../../core/Model";
 import { reference, systemPrompt } from "./prompt";
 
 /**
@@ -127,10 +133,32 @@ const eventsOf = (events: Stream.Stream<Anthropic.RawMessageStreamEvent, ModelEr
     let json = "";
     let input: unknown;
     let stopReason: Anthropic.StopReason | null = null;
+    // The API's counts are running totals; a count it leaves out has not changed.
+    let used: Tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    const usage = (
+      counts: Anthropic.Usage | Anthropic.MessageDeltaUsage,
+    ): Option.Option<ModelEvent> => {
+      const total: Tokens = {
+        input: counts.input_tokens ?? used.input,
+        output: counts.output_tokens,
+        cacheRead: counts.cache_read_input_tokens ?? used.cacheRead,
+        cacheWrite: counts.cache_creation_input_tokens ?? used.cacheWrite,
+      };
+      const tokens: Tokens = {
+        input: total.input - used.input,
+        output: total.output - used.output,
+        cacheRead: total.cacheRead - used.cacheRead,
+        cacheWrite: total.cacheWrite - used.cacheWrite,
+      };
+      used = total;
+      return Option.some({ _tag: "Usage", tokens });
+    };
     const translate = (
       event: Anthropic.RawMessageStreamEvent,
     ): Effect.Effect<Option.Option<ModelEvent>, ModelError> => {
       switch (event.type) {
+        case "message_start":
+          return Effect.succeed(usage(event.message.usage));
         case "content_block_start": {
           const block = event.content_block;
           if (block.type === "text") reply.push({ type: "text", text: "" });
@@ -175,7 +203,7 @@ const eventsOf = (events: Stream.Stream<Anthropic.RawMessageStreamEvent, ModelEr
         }
         case "message_delta":
           stopReason = event.delta.stop_reason;
-          return Effect.succeedNone;
+          return Effect.succeed(usage(event.usage));
         case "message_stop":
           if (stopReason === "tool_use" && input !== undefined)
             return Effect.succeedSome({ _tag: "ToolCall", input, reply });

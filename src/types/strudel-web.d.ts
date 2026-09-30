@@ -17,6 +17,15 @@ declare module "@strudel/web" {
       readonly cps: number;
       /** Fractional cycles; 0 while stopped. */
       now(): number;
+      /**
+       * Internals of the default cyclist, set on each tick before it checks whether it is too
+       * late: the tick's time on the audio clock, and the cycles it queries.
+       */
+      readonly lastTick: number;
+      readonly lastBegin: number;
+      readonly lastEnd: number;
+      /** The pattern it plays, once one is set. */
+      readonly pattern?: Pattern;
     };
     readonly state: { readonly evalError?: { readonly message: string } };
   }
@@ -26,11 +35,24 @@ declare module "@strudel/web" {
   /** Resolves once audio is initialised, which happens on the first `mousedown` on `document`. */
   export function initAudioOnFirstClick(): Promise<void>;
   export function getAudioContext(): AudioContext;
+  /**
+   * The repl's default output: plays `hap` through superdough at `time` on the audio clock, or
+   * drops it if `time` has passed. `initStrudel`'s `defaultOutput` option replaces it.
+   */
+  export function webaudioOutput(
+    hap: unknown,
+    deadline: number,
+    duration: number,
+    cps: number,
+    time: number,
+  ): Promise<void>;
 
   /** A pattern of events. Controls such as `size` are methods, registered at load. */
   export class Pattern {
     /** The events in `state`'s span. Throws what the pattern throws, where `queryArc` logs it. */
     query(state: State): ReadonlyArray<unknown>;
+    /** The events from cycle `begin` to `end`, logging and swallowing what the pattern throws. */
+    queryArc(begin: number, end: number): ReadonlyArray<{ hasOnset(): boolean }>;
     /** Registers the pattern under `id`; replaced by the repl on every evaluate. */
     p: (this: Pattern, id: unknown) => Pattern;
     /** Plays the pattern on the repl's scheduler. */

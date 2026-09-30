@@ -43,11 +43,12 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
      * playing and the error slot names the Part that failed, when it can be found. Given the texts
      * an agent `written`, keyed as in `dryRun`, it does nothing unless every one is still its
      * Part's text: once the human has edited, undone or deleted one, the Part is theirs again.
+     * Succeeds with whether it evaluated.
      */
     readonly apply: (
       scope: Scope,
       written?: ReadonlyMap<string, string>,
-    ) => Effect.Effect<void, EvalError>;
+    ) => Effect.Effect<boolean, EvalError>;
     /**
      * Makes the in-Scope Parts' current text their Live code without evaluating anything, as an
      * agent Apply on a stopped transport does (spec §5); with `written`, as `apply` does.
@@ -83,7 +84,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
         lock.withPermits(1)(
           Effect.gen(function* () {
             const performance = parsePerformance(yield* editor.read);
-            if (!holds(performance, written)) return;
+            if (!holds(performance, written)) return false;
             const live = yield* SubscriptionRef.get(ref);
             const composition = compose(performance, live, scope);
             yield* strudel.evaluate(composition.code).pipe(
@@ -98,6 +99,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
             );
             yield* SubscriptionRef.set(ref, liveCodeAfter(performance, live, scope));
             yield* errorSlot.clear;
+            return true;
           }),
         );
 

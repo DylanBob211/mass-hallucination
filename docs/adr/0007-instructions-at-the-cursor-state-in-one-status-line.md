@@ -123,4 +123,4 @@ Keys added: **Alt-H**.
 - A conversation the human can review, and giving the agent that history to make it more
   independent, are both deferred past the POC.
 - Keys used: Ctrl-Enter, Ctrl-., Ctrl-K, Ctrl-J, Esc, Tab (in the input), Alt-A/P/R, Alt-1/2/3,
-  Alt-H (17).
+  Alt-H (17), Alt-L (the peek's log download, poc-build ticket 12).

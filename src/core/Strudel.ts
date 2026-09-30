@@ -16,6 +16,17 @@ export interface DryRunWarning {
   readonly offset?: number;
 }
 
+/**
+ * A note never heard because it came too late (spec §11), at `at` (epoch ms): dropped by the
+ * `scheduler` with the rest of a tick it reached `lateBy` ms after the tick's time, or by the
+ * audio `output` it reached `lateBy` ms after the note's time.
+ */
+export interface LateNote {
+  readonly at: number;
+  readonly lateBy: number;
+  readonly where: "scheduler" | "output";
+}
+
 /** The embedded `@strudel/web` repl (ADR 0002). */
 export class Strudel extends Context.Tag("Strudel")<
   Strudel,
@@ -35,5 +46,7 @@ export class Strudel extends Context.Tag("Strudel")<
     readonly position: Effect.Effect<number>;
     /** The message of each error the playing pattern throws after evaluate, from now on. */
     readonly playbackErrors: Stream.Stream<string>;
+    /** Each late note from now on (spec §11). */
+    readonly lateNotes: Stream.Stream<LateNote>;
   }
 >() {}

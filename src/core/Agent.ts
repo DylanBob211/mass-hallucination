@@ -5,6 +5,7 @@ import { changeParts } from "./changeParts";
 import { type DraftChange, draftOf } from "./draft";
 import type { Editor } from "./Editor";
 import type { ErrorSlotStore } from "./ErrorSlotStore";
+import { Instrumentation, type TurnEvent } from "./Instrumentation";
 import type { LiveCodeStore } from "./LiveCodeStore";
 import { Model, type Retry, type ToolCall } from "./Model";
 import type { ProposalStore } from "./ProposalStore";
@@ -59,37 +60,62 @@ export class Agent extends Context.Tag("Agent")<
         | AutonomyStore
         | ProposalStore
         | AgentApplies
+        | Instrumentation
       >();
+      const instrumentation = yield* Instrumentation;
       const scope = yield* Effect.scope;
       const ref = yield* SubscriptionRef.make(initialViewModel.turns);
       const draft = yield* SubscriptionRef.make(initialViewModel.draft);
       // Starting and stopping Turns one at a time, so two Instructions never both run.
       const control = yield* Effect.makeSemaphore(1);
-      let running: { readonly index: number; readonly fiber: Fiber.RuntimeFiber<void> } | undefined;
+      let running:
+        | {
+            readonly index: number;
+            readonly logId: number;
+            readonly fiber: Fiber.RuntimeFiber<void>;
+          }
+        | undefined;
 
-      /** Changes the Turn at `index` by `change`, unless it has ended. */
-      const update = (index: number, change: (turn: TurnView) => TurnView) =>
-        SubscriptionRef.update(ref, (turns) => {
+      /**
+       * Changes the Turn at `index` by `change`, unless it has ended. An ending goes in the log
+       * as the Turn `logId` there.
+       */
+      const update = (index: number, logId: number, change: (turn: TurnView) => TurnView) =>
+        SubscriptionRef.modify(ref, (turns): [TurnView | undefined, ReadonlyArray<TurnView>] => {
           const turn = turns[index];
-          if (turn === undefined || turnEndings.has(turn.state)) return turns;
+          if (turn === undefined || turnEndings.has(turn.state)) return [undefined, turns];
           const next = change(turn);
-          if (next === turn) return turns;
-          return Object.freeze(turns.map((t, i) => (i === index ? Object.freeze(next) : t)));
-        });
+          if (next === turn) return [undefined, turns];
+          return [
+            turnEndings.has(next.state) ? next : undefined,
+            Object.freeze(turns.map((t, i) => (i === index ? Object.freeze(next) : t))),
+          ];
+        }).pipe(
+          Effect.flatMap((ended) =>
+            ended === undefined
+              ? Effect.void
+              : instrumentation.record(logId, {
+                  _tag: "Ended",
+                  ending: ended.state,
+                  retries: ended.retries,
+                }),
+          ),
+        );
 
       /** Ends the running Turn as `ending`, unless it has ended already. */
       const interrupt = (ending: TurnState) =>
         Effect.gen(function* () {
           if (running === undefined) return;
-          const { index, fiber } = running;
+          const { index, logId, fiber } = running;
           running = undefined;
           yield* Fiber.interrupt(fiber);
-          yield* update(index, (turn) => ({ ...turn, state: ending }));
+          yield* update(index, logId, (turn) => ({ ...turn, state: ending }));
         });
 
       const instruct = (instruction: string, aim: string | null) =>
-        control
-          .withPermits(1)(
+        // Enter is when it was asked, however long the running Turn takes to stop.
+        Effect.flatMap(instrumentation.began(instruction, aim), (logId) =>
+          control.withPermits(1)(
             Effect.gen(function* () {
               yield* interrupt("superseded");
               const index = yield* SubscriptionRef.modify(ref, (turns) => [
@@ -105,23 +131,29 @@ export class Agent extends Context.Tag("Agent")<
                   }),
                 ]),
               ]);
-              const turn = (change: (turn: TurnView) => TurnView) => update(index, change);
+              const turn = (change: (turn: TurnView) => TurnView) => update(index, logId, change);
               const fiber = yield* Effect.forkIn(
                 Effect.provide(
                   // A half-streamed draft just disappears (ADR 0007).
                   Effect.ensuring(
-                    runTurn(instruction, aim, turn, (next) => SubscriptionRef.set(draft, next)),
+                    runTurn(
+                      instruction,
+                      aim,
+                      turn,
+                      (next) => SubscriptionRef.set(draft, next),
+                      (event) => instrumentation.record(logId, event),
+                    ),
                     SubscriptionRef.set(draft, undefined),
                   ),
                   context,
                 ),
                 scope,
               );
-              running = { index, fiber };
+              running = { index, logId, fiber };
               return fiber;
             }),
-          )
-          .pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
+          ),
+        ).pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
 
       return {
         instruct,
@@ -134,16 +166,22 @@ export class Agent extends Context.Tag("Agent")<
   );
 }
 
+const called: TurnEvent = { _tag: "Called" };
+const streamed: TurnEvent = { _tag: "Streamed" };
+const heard: TurnEvent = { _tag: "Heard" };
+
 /**
  * One Turn: asks the model, passes its call to `change_parts`, and on a refusal asks again with
  * the refused call and its result, until a change lands, the model answers in words, or it gives
- * up. `turn` shows where it is, and `draft` the change as the model writes it.
+ * up. `turn` shows where it is, `draft` the change as the model writes it, and `log` what the
+ * instrumentation records of it.
  */
 const runTurn = (
   instruction: string,
   aim: string | null,
   turn: (change: (turn: TurnView) => TurnView) => Effect.Effect<void>,
   draft: (changes: ReadonlyArray<DraftChange> | undefined) => Effect.Effect<void>,
+  log: (event: TurnEvent) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     const model = yield* Model;
@@ -154,21 +192,31 @@ const runTurn = (
       let note = "";
       let call: ToolCall | undefined;
       yield* turn((t) => ({ ...t, state: "thinking", note }));
+      yield* log(called);
       yield* Stream.runForEach(
         model.stream({ snapshot, instruction, retries: [...retries] }),
         (event) => {
           switch (event._tag) {
             case "Text":
               note += event.delta;
-              return turn((t) => ({ ...t, note }));
+              return Effect.andThen(
+                event.delta === "" ? Effect.void : log(streamed),
+                turn((t) => ({ ...t, note })),
+              );
             case "ToolInput":
               return Effect.andThen(
-                turn((t) => (t.state === "writing" ? t : { ...t, state: "writing" })),
-                draft(draftOf(event.partial)),
+                // The first delta of tool input may be empty.
+                event.partial === "" ? Effect.void : log(streamed),
+                Effect.andThen(
+                  turn((t) => (t.state === "writing" ? t : { ...t, state: "writing" })),
+                  draft(draftOf(event.partial)),
+                ),
               );
             case "ToolCall":
               call = event;
               return Effect.void;
+            case "Usage":
+              return log({ _tag: "Used", tokens: event.tokens });
           }
         },
       );
@@ -176,16 +224,19 @@ const runTurn = (
       yield* turn((t) => ({ ...t, state: "dry-running" }));
       // The draft goes in the same uninterruptible step as the landing, so a landed change never
       // leaves its draft behind.
-      const result = yield* changeParts(call.input, (landed, warnings) =>
-        Effect.andThen(
-          draft(undefined),
-          turn((t) => ({
-            ...t,
-            state: "landed",
-            landed,
-            ...(warnings.length > 0 && { warnings }),
-          })),
-        ),
+      const result = yield* changeParts(
+        call.input,
+        (landed, warnings) =>
+          Effect.andThen(
+            draft(undefined),
+            turn((t) => ({
+              ...t,
+              state: "landed",
+              landed,
+              ...(warnings.length > 0 && { warnings }),
+            })),
+          ),
+        log(heard),
       );
       if (result.ok) return;
       yield* draft(undefined);

@@ -5,7 +5,15 @@ import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
 import { AutonomyStore } from "./AutonomyStore";
 import { ErrorSlotStore } from "./ErrorSlotStore";
-import { answers, hangsWriting, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
+import {
+  answers,
+  hangsWriting,
+  makeFakeEditor,
+  makeFakeModel,
+  makeFakePage,
+  makeFakeStrudel,
+} from "./fakes";
+import { Instrumentation } from "./Instrumentation";
 import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { revOf } from "./Performance";
@@ -26,15 +34,17 @@ const withSource = (
       Stream.runForEach(store.changes, (vm) => SubscriptionRef.update(seen, (all) => [...all, vm])),
     );
     const model = makeFakeModel(replies);
+    const page = yield* makeFakePage();
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
         Layer.provideMerge(Agent.layer),
+        Layer.provideMerge(Instrumentation.layer),
         Layer.provideMerge(ProposalStore.layer),
         Layer.provideMerge(AgentApplies.layer),
         Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
         Layer.provideMerge(ErrorSlotStore.layer),
-        Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, model.layer)),
+        Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, model.layer, page.layer)),
       ),
     );
     yield* Effect.forkScoped(Effect.provide(collect, context));
