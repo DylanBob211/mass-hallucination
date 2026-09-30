@@ -1,7 +1,8 @@
 import { undo } from "@codemirror/commands";
 import { userEvent } from "@vitest/browser/context";
 import { Effect, Either } from "effect";
-import { afterEach, expect, test } from "vitest";
+import type { EditorView } from "@codemirror/view";
+import { afterEach, describe, expect, test } from "vitest";
 import { Editor } from "../../core/Editor";
 import { createEditor } from "../../ui/editor";
 import { editorLayer } from "./editor";
@@ -18,6 +19,8 @@ const mounted = () => {
     reject: () => {},
     instruct: () => {},
     stop: () => {},
+    togglePeek: () => {},
+    closePeek: () => false,
   });
   document.body.append(view.dom);
   view.focus();
@@ -66,4 +69,63 @@ test("an agent write onto a Source that has moved writes nothing", async () => {
   expect(Either.isLeft(result)).toBe(true);
   expect(view.state.doc.toString()).toBe(source);
   view.destroy();
+});
+
+describe("agent-written text", () => {
+  /** The text of each tinted stretch, in order. */
+  const tinted = (view: EditorView) =>
+    [...view.dom.querySelectorAll(".cm-agent-text")].map((el) => el.textContent);
+  /** Writes `hats` as the agent would, whole, over the Source as it is. */
+  const writeHats = (
+    view: EditorView,
+    write: ReturnType<typeof mounted>["write"],
+    text: string,
+  ) => {
+    const current = view.state.doc.toString();
+    const from = current.indexOf("hats");
+    return write(current, [{ from, to: from + 'hats: s("hh*8")'.length, insert: text }]);
+  };
+
+  test("is tinted where it differs from what it replaced", async () => {
+    const { view, write } = mounted();
+
+    await writeHats(view, write, 'hats: s("hh*16").gain(.6)');
+
+    expect(tinted(view)).toEqual(['16").gain(.6']);
+    view.destroy();
+  });
+
+  test("stays tinted while the human edits another Part, and not once they edit its own", async () => {
+    const { view, write } = mounted();
+    await writeHats(view, write, 'hats: s("hh*16")');
+
+    view.dispatch({ selection: { anchor: 'kick: s("bd*4"'.length } });
+    await userEvent.keyboard(".fast(2)");
+    expect(tinted(view)).toEqual(["16"]);
+
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    await userEvent.keyboard(".gain(1)");
+    expect(tinted(view)).toEqual([]);
+    view.destroy();
+  });
+
+  test("loses its tint when the human undoes the write", async () => {
+    const { view, write } = mounted();
+    await writeHats(view, write, 'hats: s("hh*16")');
+
+    undo(view);
+
+    expect(view.state.doc.toString()).toBe(source);
+    expect(tinted(view)).toEqual([]);
+    view.destroy();
+  });
+
+  test("a new Part the agent adds is tinted whole", async () => {
+    const { view, write } = mounted();
+
+    await write(source, [{ from: source.length, to: source.length, insert: '\nbass: note("c2")' }]);
+
+    expect(tinted(view)).toEqual(['bass: note("c2")']);
+    view.destroy();
+  });
 });

@@ -1,5 +1,7 @@
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { PartView, TurnView } from "../facade/facade";
+import { showAgentWork } from "./agentWork";
 import { createEditor } from "./editor";
 import { showProposal } from "./proposal";
 
@@ -13,6 +15,8 @@ const mounted = (source: string, cursor = 0) => {
     reject: vi.fn(),
     instruct: vi.fn(),
     stop: vi.fn(),
+    togglePeek: vi.fn(),
+    closePeek: vi.fn(() => false),
   };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
@@ -254,12 +258,139 @@ describe("an Instruction", () => {
   });
 });
 
-test("Esc in the editor stops the running Turn", async () => {
+test("Esc in the editor closes the open peek, and stops the running Turn only once it is closed", async () => {
   const { view, commands } = mounted('s("bd")');
+  commands.closePeek.mockReturnValueOnce(true);
 
   await userEvent.keyboard("{Escape}");
+  expect(commands.closePeek).toHaveBeenCalledOnce();
+  expect(commands.stop).not.toHaveBeenCalled();
 
+  await userEvent.keyboard("{Escape}");
   expect(commands.stop).toHaveBeenCalledOnce();
   expect(view.hasFocus).toBe(true);
   view.destroy();
+});
+
+test("Ctrl-J toggles the peek, and focus stays in the editor", async () => {
+  const { view, commands } = mounted('s("bd")');
+
+  await userEvent.keyboard("{Control>}j{/Control}");
+
+  expect(commands.togglePeek).toHaveBeenCalledOnce();
+  expect(view.state.doc.toString()).toBe('s("bd")');
+  expect(view.hasFocus).toBe(true);
+  view.destroy();
+});
+
+describe("the agent at work", () => {
+  const source = 'kick: s("bd*4")\n// the hats\nhats: s("hh*8")\n  .gain(.6)\nsetcps(.5)';
+  const turn = (state: TurnView["state"], aim: string | null): TurnView => ({
+    instruction: "make it busier",
+    aim,
+    state,
+    note: "",
+    retries: 0,
+  });
+  const part = (id: string): PartView => ({
+    id,
+    muted: false,
+    soloed: false,
+    surface: "audio",
+    unapplied: false,
+    deleted: false,
+  });
+  const parts = [part("kick"), part("hats")];
+
+  test("streams its change as a dashed block under the Part, a new Part at the end", () => {
+    const { view } = mounted(source);
+
+    view.dispatch({
+      effects: showAgentWork.of({
+        turn: turn("writing", "hats"),
+        draft: [
+          { part: "hats", text: 'hats: s("hh*16")' },
+          { part: "bass", text: "bass: n" },
+        ],
+        parts,
+      }),
+    });
+
+    const blocks = [...view.dom.querySelectorAll(".cm-draft")];
+    expect(blocks.map((el) => el.textContent)).toEqual(['hats: s("hh*16")', "bass: n"]);
+    const order = [...view.dom.querySelectorAll(".cm-line, .cm-draft")].map((el) =>
+      el.classList.contains("cm-draft") ? "draft" : "line",
+    );
+    expect(order).toEqual(["line", "line", "line", "line", "draft", "line", "draft"]);
+    expect(view.state.doc.toString()).toBe(source);
+
+    view.dispatch({
+      effects: showAgentWork.of({ turn: turn("stopped", "hats"), draft: undefined, parts }),
+    });
+    expect(view.dom.querySelectorAll(".cm-draft")).toHaveLength(0);
+    view.destroy();
+  });
+
+  test("badges the label line of the Part it is aimed at while the Turn runs", () => {
+    const { view } = mounted(source);
+    const badged = () =>
+      [...view.dom.querySelectorAll(".cm-line")]
+        .filter((line) => line.querySelector(".cm-agent-badge") !== null)
+        .map((line) => line.textContent.replace(/agent at work$/, ""));
+
+    view.dispatch({
+      effects: showAgentWork.of({ turn: turn("thinking", "hats"), draft: undefined, parts }),
+    });
+    expect(badged()).toEqual(['hats: s("hh*8")']);
+
+    view.dispatch({
+      effects: showAgentWork.of({ turn: turn("landed", "hats"), draft: undefined, parts }),
+    });
+    expect(badged()).toEqual([]);
+    view.destroy();
+  });
+
+  test("once it writes, badges the Parts its change touches instead", () => {
+    const { view } = mounted(source);
+
+    view.dispatch({
+      effects: showAgentWork.of({
+        turn: turn("writing", null),
+        draft: [
+          { part: "kick", text: "kick: s(" },
+          { part: "bass", text: "" },
+        ],
+        parts,
+      }),
+    });
+
+    const badges = [...view.dom.querySelectorAll(".cm-line .cm-agent-badge")];
+    expect(badges.map((badge) => badge.closest(".cm-line")?.firstChild?.textContent)).toEqual([
+      'kick: s("bd*4")',
+    ]);
+    view.destroy();
+  });
+
+  test("shows a deleted Part still sounding as a struck-through ghost at the end", () => {
+    const { view } = mounted(source);
+
+    view.dispatch({
+      effects: showAgentWork.of({
+        turn: undefined,
+        draft: undefined,
+        parts: [
+          ...parts,
+          { ...part("bass"), unapplied: true, deleted: true, live: 'bass: note("c2")' },
+        ],
+      }),
+    });
+
+    const lines = [...view.dom.querySelectorAll(".cm-line, .cm-ghost")];
+    expect(lines.at(-1)?.classList.contains("cm-ghost")).toBe(true);
+    expect(lines.at(-1)?.textContent).toBe('bass: note("c2")');
+
+    view.dispatch({ effects: showAgentWork.of({ turn: undefined, draft: undefined, parts }) });
+    expect(view.dom.querySelectorAll(".cm-ghost")).toHaveLength(0);
+    view.destroy();
+  });
 });

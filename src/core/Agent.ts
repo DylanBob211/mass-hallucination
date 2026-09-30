@@ -2,6 +2,7 @@ import { Context, Data, Effect, Fiber, Layer, Stream, SubscriptionRef } from "ef
 import type { AgentApplies } from "./AgentApplies";
 import type { AutonomyStore } from "./AutonomyStore";
 import { changeParts } from "./changeParts";
+import { type DraftChange, draftOf } from "./draft";
 import type { Editor } from "./Editor";
 import type { ErrorSlotStore } from "./ErrorSlotStore";
 import type { LiveCodeStore } from "./LiveCodeStore";
@@ -39,6 +40,11 @@ export class Agent extends Context.Tag("Agent")<
     readonly turns: Effect.Effect<ReadonlyArray<TurnView>>;
     /** The Turns now, then after every change. */
     readonly changes: Stream.Stream<ReadonlyArray<TurnView>>;
+    /**
+     * The running Turn's tool input as far as it has streamed (ADR 0007), now and after every
+     * change: `undefined` unless the model is writing a change or its change is being checked.
+     */
+    readonly drafts: Stream.Stream<ReadonlyArray<DraftChange> | undefined>;
   }
 >() {
   static readonly layer = Layer.scoped(
@@ -56,6 +62,7 @@ export class Agent extends Context.Tag("Agent")<
       >();
       const scope = yield* Effect.scope;
       const ref = yield* SubscriptionRef.make(initialViewModel.turns);
+      const draft = yield* SubscriptionRef.make(initialViewModel.draft);
       // Starting and stopping Turns one at a time, so two Instructions never both run.
       const control = yield* Effect.makeSemaphore(1);
       let running: { readonly index: number; readonly fiber: Fiber.RuntimeFiber<void> } | undefined;
@@ -100,7 +107,14 @@ export class Agent extends Context.Tag("Agent")<
               ]);
               const turn = (change: (turn: TurnView) => TurnView) => update(index, change);
               const fiber = yield* Effect.forkIn(
-                Effect.provide(runTurn(instruction, aim, turn), context),
+                Effect.provide(
+                  // A half-streamed draft just disappears (ADR 0007).
+                  Effect.ensuring(
+                    runTurn(instruction, aim, turn, (next) => SubscriptionRef.set(draft, next)),
+                    SubscriptionRef.set(draft, undefined),
+                  ),
+                  context,
+                ),
                 scope,
               );
               running = { index, fiber };
@@ -114,6 +128,7 @@ export class Agent extends Context.Tag("Agent")<
         stop: control.withPermits(1)(interrupt("stopped")),
         turns: SubscriptionRef.get(ref),
         changes: ref.changes,
+        drafts: Stream.changes(draft.changes),
       };
     }),
   );
@@ -122,12 +137,13 @@ export class Agent extends Context.Tag("Agent")<
 /**
  * One Turn: asks the model, passes its call to `change_parts`, and on a refusal asks again with
  * the refused call and its result, until a change lands, the model answers in words, or it gives
- * up. `turn` shows where it is.
+ * up. `turn` shows where it is, and `draft` the change as the model writes it.
  */
 const runTurn = (
   instruction: string,
   aim: string | null,
   turn: (change: (turn: TurnView) => TurnView) => Effect.Effect<void>,
+  draft: (changes: ReadonlyArray<DraftChange> | undefined) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     const model = yield* Model;
@@ -146,7 +162,10 @@ const runTurn = (
               note += event.delta;
               return turn((t) => ({ ...t, note }));
             case "ToolInput":
-              return turn((t) => (t.state === "writing" ? t : { ...t, state: "writing" }));
+              return Effect.andThen(
+                turn((t) => (t.state === "writing" ? t : { ...t, state: "writing" })),
+                draft(draftOf(event.partial)),
+              );
             case "ToolCall":
               call = event;
               return Effect.void;
@@ -155,10 +174,21 @@ const runTurn = (
       );
       if (call === undefined) return yield* turn((t) => ({ ...t, state: "answered" }));
       yield* turn((t) => ({ ...t, state: "dry-running" }));
+      // The draft goes in the same uninterruptible step as the landing, so a landed change never
+      // leaves its draft behind.
       const result = yield* changeParts(call.input, (landed, warnings) =>
-        turn((t) => ({ ...t, state: "landed", landed, ...(warnings.length > 0 && { warnings }) })),
+        Effect.andThen(
+          draft(undefined),
+          turn((t) => ({
+            ...t,
+            state: "landed",
+            landed,
+            ...(warnings.length > 0 && { warnings }),
+          })),
+        ),
       );
       if (result.ok) return;
+      yield* draft(undefined);
       retries.push({ call, result });
       if (retries.length > maxRetries)
         return yield* turn((t) => ({ ...t, state: "out of retries" }));

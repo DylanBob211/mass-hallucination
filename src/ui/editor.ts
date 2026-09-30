@@ -3,6 +3,8 @@ import { javascript } from "@codemirror/lang-javascript";
 import { Prec } from "@codemirror/state";
 import { EditorView, drawSelection, type KeyBinding, keymap } from "@codemirror/view";
 import type { Autonomy } from "../facade/facade";
+import { agentMarks } from "./agentMarks";
+import { agentWork } from "./agentWork";
 import { type InstructionCommands, instructionInput } from "./instruction";
 import { proposalDiff, type ProposalCommands } from "./proposal";
 
@@ -36,6 +38,10 @@ export interface EditorCommands extends ProposalCommands, InstructionCommands {
   setAutonomy(autonomy: Autonomy): void;
   /** Stops the running Turn. */
   stop(): void;
+  /** Opens the peek if it is closed, and closes it if it is open (ADR 0007). */
+  togglePeek(): void;
+  /** Closes the peek; `false` if it was closed already. */
+  closePeek(): boolean;
 }
 
 const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
@@ -61,10 +67,18 @@ const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyAr
       ...instructionKeys,
       {
         key: "Escape",
-        // Esc also keeps its default, collapsing a multiple selection.
+        // Esc closes an open peek first, so dismissing it never stops a Turn. Either way it keeps
+        // its default, collapsing a multiple selection.
         run: () => {
-          commands.stop();
+          if (!commands.closePeek()) commands.stop();
           return false;
+        },
+      },
+      {
+        key: "Ctrl-j",
+        run: () => {
+          commands.togglePeek();
+          return true;
         },
       },
       {
@@ -114,6 +128,8 @@ export const createEditor = (source: string, commands: EditorCommands): EditorVi
       keymap.of([...defaultKeymap, ...historyKeymap]),
       javascript(),
       proposalDiff(commands),
+      agentWork,
+      agentMarks,
       theme,
     ],
   });

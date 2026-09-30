@@ -1,4 +1,8 @@
 import type { Landed } from "./changeParts";
+import type { DraftChange } from "./draft";
+
+/** One change of the streamed draft (ADR 0007): its Part, and its text so far. */
+export type { DraftChange } from "./draft";
 import type { Part } from "./Performance";
 
 /**
@@ -25,6 +29,11 @@ export interface ViewModel {
   readonly proposal: ProposalView | undefined;
   /** This session's Turns, oldest first; the last is the running or latest one. */
   readonly turns: ReadonlyArray<TurnView>;
+  /**
+   * The running Turn's change as the model writes it (ADR 0007): each Part it changes, with its
+   * text so far. `undefined` unless a change is being written or checked.
+   */
+  readonly draft: ReadonlyArray<DraftChange> | undefined;
 }
 
 /** The agent's work on one Instruction (CONTEXT.md), as the status line shows it. */
@@ -102,6 +111,8 @@ export interface PartView extends Pick<Part, "id" | "muted" | "soloed" | "surfac
   readonly unapplied: boolean;
   /** Gone from the Source but still sounding, until an Apply of every Part. */
   readonly deleted: boolean;
+  /** A deleted Part's Live code: the text still sounding, shown as its ghost (ADR 0007). */
+  readonly live?: string;
 }
 
 /**
@@ -132,4 +143,5 @@ export const initialViewModel: ViewModel = Object.freeze({
   waitingApply: undefined,
   proposal: undefined,
   turns: Object.freeze([]),
+  draft: undefined,
 });

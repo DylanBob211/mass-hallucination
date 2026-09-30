@@ -1,6 +1,7 @@
 import { type EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { locateUnits, preambleId, type ProposalView } from "../facade/facade";
+import { locateUnits, type ProposalView } from "../facade/facade";
+import { blockPlace } from "./place";
 
 /** What the Proposal's buttons ask of the Performance; each duplicates a key (spec §10). */
 export interface ProposalCommands {
@@ -48,10 +49,7 @@ const decorationsOf = (
     // A new Part replaces nothing, even once the human has taken its name (it is then Stale).
     const ranges = added ? [] : units.filter(({ id }) => id === part);
     struck.push(...ranges);
-    const [first] = ranges;
-    if (first !== undefined) blocks.push({ at: state.doc.lineAt(first.to).to, side: 1, text });
-    else if (!added && part === preambleId) blocks.push({ at: 0, side: -1, text });
-    else blocks.push({ at: state.doc.length, side: 1, text });
+    blocks.push({ ...blockPlace(state, part, ranges[0]), text });
   }
   // The buttons go under the last block, where the eye ends reading the diff.
   blocks.sort((a, b) => a.at - b.at || a.side - b.side);

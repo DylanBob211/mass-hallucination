@@ -143,16 +143,18 @@ export class Scripted extends Data.TaggedClass("Scripted")<{
   readonly reply:
     | { readonly answer: string }
     | { readonly fail: string }
-    /** Writes a note, then the tool input in two pieces, then nothing until interrupted. */
-    | { readonly hang: true };
+    /** Writes a note, then the tool input as far as `hang`, then nothing until interrupted. */
+    | { readonly hang: string };
 }> {}
 
 /** The model answers `text` in words. */
 export const answers = (text: string) => new Scripted({ reply: { answer: text } });
 /** The model fails, as a network or API error. */
 export const fails = (message: string) => new Scripted({ reply: { fail: message } });
+/** The model starts writing its tool input as `partial`, and never finishes. */
+export const hangsWriting = (partial: string) => new Scripted({ reply: { hang: partial } });
 /** The model never finishes. */
-export const hangs = new Scripted({ reply: { hang: true } });
+export const hangs = hangsWriting('{"changes":[');
 
 /**
  * A `Model` that answers each request with the next of `replies`: a note and then a
@@ -175,7 +177,7 @@ export const makeFakeModel = (replies: ReadonlyArray<unknown>) => {
     return Stream.concat(
       Stream.make<ModelEvent[]>(
         { _tag: "Text", delta: "Working on it." },
-        { _tag: "ToolInput", partial: '{"changes":[' },
+        { _tag: "ToolInput", partial: reply.hang },
       ),
       Stream.never,
     ).pipe(

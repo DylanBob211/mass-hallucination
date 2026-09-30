@@ -16,6 +16,7 @@ import { ViewModelStore } from "../core/ViewModelStore";
 
 export type {
   Autonomy,
+  DraftChange,
   ErrorSlot,
   PartView,
   ProposalView,
@@ -27,6 +28,12 @@ export type {
 export { turnEndings } from "../core/viewModel";
 export type { Surface } from "../core/Performance";
 export { preambleId, type Scope } from "../core/liveCode";
+
+/**
+ * The user event an agent write is tagged with, so the editor can tell agent text from the human's
+ * (ADR 0007).
+ */
+export const agentWriteEvent = "agent.write";
 
 /**
  * Where each unit of the Source sits, in Source order: each Part by its identity, and each

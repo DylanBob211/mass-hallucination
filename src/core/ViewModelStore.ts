@@ -100,6 +100,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
 
       yield* follow("proposal", proposals.changes.pipe(Stream.changes, Stream.map(proposalView)));
       yield* follow("turns", agent.changes);
+      yield* follow("draft", agent.drafts);
 
       return { changes: ref.changes };
     }),
@@ -145,21 +146,29 @@ const withParts = (current: ViewModel, performance: Performance, live: LiveCode)
 
 /** The Source's Parts, then each deleted Part as its Live code reads. */
 const partViews = (performance: Performance, live: LiveCode): Array<PartView> => [
-  ...performance.parts.map((part) => viewOf(part, isUnapplied(part, live), false)),
+  ...performance.parts.map((part) => viewOf(part, isUnapplied(part, live))),
   ...deleted(performance, live).flatMap(([id, text]) =>
-    parsePerformance(text).parts.map((part) => viewOf({ ...part, id }, true, true)),
+    parsePerformance(text).parts.map((part) => ({
+      ...viewOf({ ...part, id }, true),
+      deleted: true,
+      live: text,
+    })),
   ),
 ];
 
-const viewOf = (
-  { id, muted, soloed, surface }: Part,
-  unapplied: boolean,
-  deleted: boolean,
-): PartView => ({ id, muted, soloed, surface, unapplied, deleted });
+const viewOf = ({ id, muted, soloed, surface }: Part, unapplied: boolean): PartView => ({
+  id,
+  muted,
+  soloed,
+  surface,
+  unapplied,
+  deleted: false,
+});
 
 const sameView = (a: PartView, b: PartView) =>
   a.muted === b.muted &&
   a.soloed === b.soloed &&
   a.surface === b.surface &&
   a.unapplied === b.unapplied &&
-  a.deleted === b.deleted;
+  a.deleted === b.deleted &&
+  a.live === b.live;

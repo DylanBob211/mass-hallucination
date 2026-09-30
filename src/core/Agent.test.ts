@@ -5,8 +5,17 @@ import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
 import { AutonomyStore } from "./AutonomyStore";
 import { ErrorSlotStore } from "./ErrorSlotStore";
-import { answers, fails, hangs, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
+import {
+  answers,
+  fails,
+  hangs,
+  hangsWriting,
+  makeFakeEditor,
+  makeFakeModel,
+  makeFakeStrudel,
+} from "./fakes";
 import { LiveCodeStore } from "./LiveCodeStore";
+import type { DraftChange } from "./draft";
 import { revOf } from "./Performance";
 import { ProposalStore } from "./ProposalStore";
 import type { Autonomy, TurnState } from "./viewModel";
@@ -57,7 +66,15 @@ const setup = (autonomy: Autonomy, replies: ReadonlyArray<unknown>) =>
           Stream.runHead,
         ),
       );
-    return { editor, strudel, model, instruct, turns, stop, reaches };
+    /** Every draft the agent has shown, the first being none. */
+    const drafts: Array<ReadonlyArray<DraftChange> | undefined> = [];
+    yield* Effect.forkScoped(
+      Stream.runForEach(Stream.unwrap(Effect.map(agent, (a) => a.drafts)), (draft) =>
+        Effect.sync(() => drafts.push(draft)),
+      ),
+    );
+    yield* Effect.yieldNow();
+    return { editor, strudel, model, instruct, turns, stop, reaches, drafts };
   });
 
 describe("Agent", () => {
@@ -200,6 +217,35 @@ describe("Agent", () => {
 
       expect(yield* turns).toMatchObject([{ state: "landed" }]);
       expect(yield* editor.read).toContain(busier);
+    }),
+  );
+
+  it.scoped("while it writes, the draft shows the tool input so far; stopping drops it", () =>
+    Effect.gen(function* () {
+      const { instruct, stop, reaches, drafts } = yield* setup("write", [
+        hangsWriting('{"changes":[{"part":"hats","rev":"x","text":"hats: s(\\"hh'),
+      ]);
+      const running = yield* Effect.fork(instruct("make the hats busier"));
+      yield* reaches("writing");
+
+      expect(drafts.at(-1)).toEqual([{ part: "hats", text: 'hats: s("hh' }]);
+
+      yield* stop;
+      yield* Fiber.join(running);
+
+      expect(drafts.at(-1)).toBeUndefined();
+    }),
+  );
+
+  it.scoped("the draft goes once the change lands, and between a refusal and its retry", () =>
+    Effect.gen(function* () {
+      const stale = changeHats(revOf('hats: s("hh*4")'));
+      const { instruct, drafts } = yield* setup("write", [stale, changeHats()]);
+
+      yield* instruct("make the hats busier");
+
+      const draft = [{ part: "hats", text: busier }];
+      expect(drafts).toEqual([undefined, draft, undefined, draft, undefined]);
     }),
   );
 

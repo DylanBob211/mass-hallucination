@@ -5,7 +5,7 @@ import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
 import { AutonomyStore } from "./AutonomyStore";
 import { ErrorSlotStore } from "./ErrorSlotStore";
-import { answers, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
+import { answers, hangsWriting, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
 import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { revOf } from "./Performance";
@@ -14,7 +14,10 @@ import { transportPollInterval, ViewModelStore } from "./ViewModelStore";
 import { initialViewModel, type ViewModel } from "./viewModel";
 
 /** Collects every view model the store publishes over `source` into a ref the test can read. */
-const withSource = (source: string) =>
+const withSource = (
+  source: string,
+  replies: ReadonlyArray<unknown> = [answers("The hats are fine as they are.")],
+) =>
   Effect.gen(function* () {
     const editor = yield* makeFakeEditor(source);
     const strudel = yield* makeFakeStrudel();
@@ -22,7 +25,7 @@ const withSource = (source: string) =>
     const collect = Effect.flatMap(ViewModelStore, (store) =>
       Stream.runForEach(store.changes, (vm) => SubscriptionRef.update(seen, (all) => [...all, vm])),
     );
-    const model = makeFakeModel([answers("The hats are fine as they are.")]);
+    const model = makeFakeModel(replies);
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
         Layer.provideMerge(Agent.layer),
@@ -65,6 +68,7 @@ describe("ViewModelStore", () => {
         waitingApply: undefined,
         proposal: undefined,
         turns: [],
+        draft: undefined,
       });
       expect(yield* last).toBe(initialViewModel);
     }),
@@ -87,6 +91,7 @@ describe("ViewModelStore", () => {
         waitingApply: undefined,
         proposal: undefined,
         turns: [],
+        draft: undefined,
       });
     }),
   );
@@ -272,6 +277,7 @@ hats: s("hh*8")`;
             surface: "audio",
             unapplied: true,
             deleted: true,
+            live: '_kick: s("bd*4")',
           },
         ]);
 
@@ -441,5 +447,24 @@ hats: s("hh*8")`;
         },
       ]);
     }),
+  );
+
+  it.scoped(
+    "shows the change the agent is writing, as far as it has streamed, until the Turn ends",
+    () =>
+      Effect.gen(function* () {
+        const { run, last } = yield* withSource('hats: s("hh*8")', [
+          hangsWriting('{"changes":[{"part":"hats","rev":"x","text":"hats: s(\\"hh*1'),
+        ]);
+        const agent = <A>(use: (agent: Agent["Type"]) => Effect.Effect<A>) =>
+          run(Effect.flatMap(Agent, use));
+
+        yield* Effect.fork(agent((a) => a.instruct("make the hats busier", "hats")));
+        yield* TestClock.adjust(0);
+        expect((yield* last)?.draft).toEqual([{ part: "hats", text: 'hats: s("hh*1' }]);
+
+        yield* agent((a) => a.stop);
+        expect((yield* last)?.draft).toBeUndefined();
+      }),
   );
 });
