@@ -2,6 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
+import type { Autonomy } from "../facade/facade";
 
 /**
  * Tailwind classes cannot reach CodeMirror's internals, so the theme reads the same CSS variables
@@ -30,7 +31,14 @@ const theme = EditorView.theme(
 export interface EditorCommands {
   apply(): void;
   stopTransport(): void;
+  setAutonomy(autonomy: Autonomy): void;
 }
+
+const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
+  ["Alt-1", "propose"],
+  ["Alt-2", "write"],
+  ["Alt-3", "apply"],
+];
 
 /**
  * Ctrl, not Mod, as spec §10 says, and ahead of the default keymap, whose Mod-Enter would insert a
@@ -53,6 +61,13 @@ const performanceKeymap = (commands: EditorCommands) =>
           return true;
         },
       },
+      ...autonomyKeys.map(([key, autonomy]) => ({
+        key,
+        run: () => {
+          commands.setAutonomy(autonomy);
+          return true;
+        },
+      })),
     ]),
   );
 

@@ -11,6 +11,7 @@ if (!target) throw new Error("#app is missing from index.html");
 const view = createEditor("", {
   apply: () => void facade.apply(),
   stopTransport: () => void facade.stopTransport(),
+  setAutonomy: (autonomy) => void facade.setAutonomy(autonomy),
 });
 const facade = createLiveFacade(view);
 const app = mount(App, { target, props: { facade, view } });

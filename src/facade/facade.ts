@@ -1,14 +1,16 @@
 import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
+import { AgentApplies } from "../core/AgentApplies";
 import { apply, stopTransport } from "../core/apply";
+import { AutonomyStore } from "../core/AutonomyStore";
 import type { Editor } from "../core/Editor";
 import { ErrorSlotStore } from "../core/ErrorSlotStore";
 import type { Scope } from "../core/liveCode";
 import { LiveCodeStore } from "../core/LiveCodeStore";
 import type { Strudel } from "../core/Strudel";
-import { initialViewModel, type ViewModel } from "../core/viewModel";
+import { type Autonomy, initialViewModel, type ViewModel } from "../core/viewModel";
 import { ViewModelStore } from "../core/ViewModelStore";
 
-export type { ErrorSlot, PartView, Transport, ViewModel } from "../core/viewModel";
+export type { Autonomy, ErrorSlot, PartView, Transport, ViewModel } from "../core/viewModel";
 export type { Surface } from "../core/Performance";
 export { preambleId, type Scope } from "../core/liveCode";
 
@@ -24,6 +26,8 @@ export interface Facade {
    */
   apply(scope?: Scope): Promise<void>;
   stopTransport(): Promise<void>;
+  /** Sets where the agent's changes land (ADR 0003). Propose writes until ticket 08. */
+  setAutonomy(autonomy: Autonomy): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -31,6 +35,8 @@ export interface Facade {
 export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
   const runtime = ManagedRuntime.make(
     ViewModelStore.layer.pipe(
+      Layer.provideMerge(AgentApplies.layer),
+      Layer.provideMerge(AutonomyStore.layer),
       Layer.provideMerge(LiveCodeStore.layer),
       Layer.provideMerge(ErrorSlotStore.layer),
       Layer.provideMerge(host),
@@ -63,6 +69,8 @@ export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
     // An evaluation error leaves the previous code playing; the view model's error slot shows it.
     apply: (scope) => runtime.runPromise(Effect.ignore(apply(scope))),
     stopTransport: () => runtime.runPromise(stopTransport),
+    setAutonomy: (autonomy) =>
+      runtime.runPromise(Effect.flatMap(AutonomyStore, (store) => store.set(autonomy))),
     async dispose() {
       listeners.clear();
       await runtime.runPromise(Fiber.interrupt(publishing));

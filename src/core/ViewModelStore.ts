@@ -1,4 +1,6 @@
 import { Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from "effect";
+import { AgentApplies } from "./AgentApplies";
+import { AutonomyStore } from "./AutonomyStore";
 import { Editor } from "./Editor";
 import { ErrorSlotStore } from "./ErrorSlotStore";
 import { deleted, isUnapplied, type LiveCode } from "./liveCode";
@@ -25,6 +27,8 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
       const strudel = yield* Strudel;
       const liveCode = yield* LiveCodeStore;
       const errorSlot = yield* ErrorSlotStore;
+      const autonomy = yield* AutonomyStore;
+      const agentApplies = yield* AgentApplies;
       const initial = withParts(
         initialViewModel,
         parsePerformance(yield* editor.read),
@@ -62,13 +66,25 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
         ),
       );
 
-      yield* Effect.forkScoped(
-        Stream.runForEach(errorSlot.changes, (error) =>
-          publish((current) =>
-            Effect.succeed(
-              current.error === error ? current : Object.freeze({ ...current, error }),
+      /** Shows each value of `values` as the view model's `key`, unless it already shows it. */
+      const follow = <K extends keyof ViewModel>(key: K, values: Stream.Stream<ViewModel[K]>) =>
+        Effect.forkScoped(
+          Stream.runForEach(values, (value) =>
+            publish((current) =>
+              Effect.succeed(
+                current[key] === value ? current : Object.freeze({ ...current, [key]: value }),
+              ),
             ),
           ),
+        );
+
+      yield* follow("error", errorSlot.changes);
+      yield* follow("autonomy", autonomy.changes);
+      // `waiting` publishes only when the cycle changes, so each view of it is a new one.
+      yield* follow(
+        "waitingApply",
+        Stream.map(agentApplies.waiting, (cycle) =>
+          cycle === undefined ? undefined : Object.freeze({ cycle }),
         ),
       );
 

@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createEditor } from "./editor";
 
 const mounted = (source: string) => {
-  const commands = { apply: vi.fn(), stopTransport: vi.fn() };
+  const commands = { apply: vi.fn(), stopTransport: vi.fn(), setAutonomy: vi.fn() };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
   view.focus();
@@ -41,5 +41,15 @@ test("Ctrl-. stops the transport, and focus stays in the editor", async () => {
   expect(commands.stopTransport).toHaveBeenCalledOnce();
   expect(commands.apply).not.toHaveBeenCalled();
   expect(view.hasFocus).toBe(true);
+  view.destroy();
+});
+
+test("Alt-1, Alt-2 and Alt-3 set the Autonomy to Propose, Write and Apply", async () => {
+  const { view, commands } = mounted('s("bd")');
+
+  await userEvent.keyboard("{Alt>}3{/Alt}{Alt>}2{/Alt}{Alt>}1{/Alt}");
+
+  expect(commands.setAutonomy.mock.calls).toEqual([["apply"], ["write"], ["propose"]]);
+  expect(view.state.doc.toString()).toBe('s("bd")');
   view.destroy();
 });

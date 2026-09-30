@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream, SubscriptionRef, TestClock } from "effect";
+import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
+import { AutonomyStore } from "./AutonomyStore";
 import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
 import type { Scope } from "./liveCode";
@@ -19,6 +21,8 @@ const withSource = (source: string) =>
     );
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
+        Layer.provideMerge(AgentApplies.layer),
+        Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
         Layer.provideMerge(ErrorSlotStore.layer),
         Layer.provideMerge(Layer.merge(editor.layer, strudel.layer)),
@@ -33,7 +37,10 @@ const withSource = (source: string) =>
     /** Applies `scope` and lets the store see what it leaves, whether it succeeds or fails. */
     const applyScope = (scope?: Scope) =>
       Effect.ensuring(Effect.provide(apply(scope), context), TestClock.adjust(0));
-    return { edit, applyScope, strudel, seen, last, tick };
+    /** Runs `effect` against the store's services, and lets the store see what it leaves. */
+    const run = <A, E>(effect: Effect.Effect<A, E, AutonomyStore | AgentApplies>) =>
+      Effect.ensuring(Effect.provide(effect, context), TestClock.adjust(0));
+    return { edit, applyScope, run, strudel, seen, last, tick };
   });
 
 const withStore = withSource("");
@@ -47,6 +54,8 @@ describe("ViewModelStore", () => {
         cycle: 0,
         parts: [],
         error: undefined,
+        autonomy: "propose",
+        waitingApply: undefined,
       });
       expect(yield* last).toBe(initialViewModel);
     }),
@@ -65,6 +74,8 @@ describe("ViewModelStore", () => {
         cycle: 12,
         parts: [],
         error: undefined,
+        autonomy: "propose",
+        waitingApply: undefined,
       });
     }),
   );
@@ -339,4 +350,34 @@ hats: s("hh*8")`;
       }),
     );
   });
+
+  it.scoped("shows the Autonomy the human set", () =>
+    Effect.gen(function* () {
+      const { run, last } = yield* withStore;
+
+      yield* run(Effect.flatMap(AutonomyStore, (store) => store.set("apply")));
+
+      expect((yield* last)?.autonomy).toBe("apply");
+    }),
+  );
+
+  it.scoped("shows an agent Apply waiting, with the cycle it plays at, until it plays", () =>
+    Effect.gen(function* () {
+      const { applyScope, run, strudel, last } = yield* withSource('hats: s("hh*8")');
+      yield* applyScope();
+      yield* strudel.setPosition(12.4);
+
+      yield* run(
+        Effect.flatMap(AgentApplies, (applies) =>
+          applies.schedule(["hats"], new Map([["hats", 'hats: s("hh*16")']])),
+        ),
+      );
+      const waiting = (yield* last)?.waitingApply;
+      yield* strudel.setPosition(13);
+      yield* TestClock.adjust("2 seconds");
+
+      expect(waiting).toEqual({ cycle: 13 });
+      expect((yield* last)?.waitingApply).toBeUndefined();
+    }),
+  );
 });

@@ -16,7 +16,17 @@ export interface ViewModel {
   readonly parts: ReadonlyArray<PartView>;
   /** The error slot; `undefined` while empty. */
   readonly error: ErrorSlot | undefined;
+  /** Where the agent's changes land (ADR 0003). */
+  readonly autonomy: Autonomy;
+  /** The next cycle boundary an agent Apply is waiting for; `undefined` while none waits. */
+  readonly waitingApply: { readonly cycle: number } | undefined;
 }
+
+/**
+ * How far an agent's change goes (CONTEXT.md): a Proposal, a write into the Source, or a write
+ * that is then Applied. Set by the human only.
+ */
+export type Autonomy = "propose" | "write" | "apply";
 
 /** A Part as the UI shows it; a deleted one as its Live code plays it. */
 export interface PartView extends Pick<Part, "id" | "muted" | "soloed" | "surface"> {
@@ -50,4 +60,6 @@ export const initialViewModel: ViewModel = Object.freeze({
   cycle: 0,
   parts: Object.freeze([]),
   error: undefined,
+  autonomy: "propose",
+  waitingApply: undefined,
 });

@@ -184,7 +184,7 @@ chords: note("c3")`;
         code.indexOf("hats"),
       );
 
-      const warnings = yield* dryRun(["hats"], { hats: 'hats: s("hh").size(1).roomsize(2)' });
+      const { warnings } = yield* dryRun(["hats"], { hats: 'hats: s("hh").size(1).roomsize(2)' });
 
       expect(warnings).toEqual(["hats: size and roomsize set the same control"]);
     }),

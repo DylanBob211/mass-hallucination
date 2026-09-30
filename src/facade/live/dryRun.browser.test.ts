@@ -48,7 +48,7 @@ describe("the audio dry-run over the real bundle", () => {
 
     const result = await dryRun(["hats"], { hats: 'hats: s("hh*16").gain(.5)' });
 
-    expect(result).toEqual(Either.right([]));
+    expect(Either.map(result, ({ warnings }) => warnings)).toEqual(Either.right([]));
   });
 
   test("refuses a syntax error, with its Part", async () => {
@@ -149,7 +149,7 @@ describe("the audio dry-run over the real bundle", () => {
       bass: 'bass: note("c2").legato(.5).clip(1).s("sawtooth")',
     });
 
-    expect(result).toEqual(
+    expect(Either.map(result, ({ warnings }) => warnings)).toEqual(
       Either.right([
         "hats: size and roomsize set the same control; only the last one counts",
         "bass: legato and clip set the same control; only the last one counts",

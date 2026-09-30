@@ -48,33 +48,60 @@ export const revOf = (text: string): Rev => bytesToHex(sha256(utf8ToBytes(text))
 export const parseOptions = { ecmaVersion: 2022, allowAwaitOutsideFunction: true } as const;
 
 export const parsePerformance = (source: string): Performance => {
-  const { program, comments } = parseSource(source);
   const parts: Array<Part> = [];
   const layout: Array<Segment> = [];
+  for (const unit of locate(source)) {
+    if ("part" in unit) {
+      parts.push(unit.part);
+      layout.push({ part: unit.part });
+    } else {
+      layout.push({ preamble: source.slice(unit.from, unit.to) });
+    }
+  }
+  const preambleText = layout
+    .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
+    .join("\n");
+  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
+};
+
+/**
+ * Where each unit of `parsePerformance(source).layout` sits in the Source, in the same order: a
+ * Part's whole text, or a Preamble segment's trimmed text.
+ */
+export type Located = ({ readonly part: Part } | { readonly preamble: true }) & {
+  readonly from: number;
+  readonly to: number;
+};
+
+export const locate = (source: string): Array<Located> => {
+  const { program, comments } = parseSource(source);
+  const units: Array<Located> = [];
   let cursor = 0;
-  const addPreamble = (segment: string) => {
-    const trimmed = segment.trim();
-    if (trimmed !== "") layout.push({ preamble: trimmed });
+  const addPreamble = (from: number, to: number) => {
+    const segment = source.slice(from, to);
+    const start = from + (segment.length - segment.trimStart().length);
+    const end = from + segment.trimEnd().length;
+    if (end > start) units.push({ preamble: true, from: start, to: end });
   };
   for (const statement of program.body) {
     if (statement.type !== "LabeledStatement") continue;
     const label = readLabel(statement.label.name);
     // A later Part with a taken identity is Preamble, so each identity addresses one Part.
-    if (label === undefined || parts.some((part) => part.id === label.id)) continue;
+    if (label === undefined || units.some((unit) => "part" in unit && unit.part.id === label.id))
+      continue;
     const from = leadingCommentsStart(source, comments, cursor, statement.start);
     const to = trailingCommentEnd(source, comments, codeEnd(source, comments, statement));
-    addPreamble(source.slice(cursor, from));
+    addPreamble(cursor, from);
     const text = source.slice(from, to);
-    const part = { ...label, text, rev: revOf(text), surface: surfaceOf(statement) };
-    parts.push(part);
-    layout.push({ part });
+    units.push({
+      part: { ...label, text, rev: revOf(text), surface: surfaceOf(statement) },
+      from,
+      to,
+    });
     cursor = to;
   }
-  addPreamble(source.slice(cursor));
-  const preambleText = layout
-    .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
-    .join("\n");
-  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
+  addPreamble(cursor, source.length);
+  return units;
 };
 
 /**

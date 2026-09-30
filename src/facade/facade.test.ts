@@ -22,7 +22,14 @@ describe("façade", () => {
 
     const unsubscribe = facade.subscribe((viewModel) => received.push(viewModel));
 
-    expect(received).toEqual([{ transport: { started: false, cps: 0.5 }, cycle: 0, parts: [] }]);
+    expect(received).toEqual([
+      {
+        transport: { started: false, cps: 0.5 },
+        cycle: 0,
+        parts: [],
+        autonomy: "propose",
+      },
+    ]);
     expect(Object.isFrozen(received[0])).toBe(true);
     unsubscribe();
     await facade.dispose();
@@ -74,6 +81,16 @@ describe("façade", () => {
       ["kick", true],
       ["hats", false],
     ]);
+    await facade.dispose();
+  });
+
+  it("setAutonomy() sets where the agent's changes land, and the view model shows it", async () => {
+    const { facade } = setup("");
+
+    await facade.setAutonomy("write");
+    await nextPoll();
+
+    expect(facade.viewModel.autonomy).toBe("write");
     await facade.dispose();
   });
 });

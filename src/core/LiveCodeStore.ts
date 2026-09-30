@@ -4,12 +4,13 @@ import { ErrorSlotStore } from "./ErrorSlotStore";
 import {
   type Composition,
   compose,
+  composeWith,
+  holds,
   type LiveCode,
   liveCodeAfter,
   noLiveCode,
   type Scope,
   unitAt,
-  withTexts,
 } from "./liveCode";
 import { parsePerformance } from "./Performance";
 import { type EvalError, Strudel } from "./Strudel";
@@ -23,6 +24,12 @@ export class Invalid extends Data.TaggedError("Invalid")<{
   readonly part?: string;
 }> {}
 
+/** A dry-run that passed: the composition it evaluated, and what it warned of. */
+export interface DryRun {
+  readonly code: string;
+  readonly warnings: ReadonlyArray<string>;
+}
+
 /** The Live code, and Apply: the one way it changes (spec §5). */
 export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
   LiveCodeStore,
@@ -33,19 +40,33 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
     /**
      * Evaluates the Source composed for `scope` and, on success, makes the in-Scope Parts' current
      * text their Live code and clears the error slot. On failure the previous Live code keeps
-     * playing and the error slot names the Part that failed, when it can be found.
+     * playing and the error slot names the Part that failed, when it can be found. Given the texts
+     * an agent `written`, keyed as in `dryRun`, it does nothing unless every one is still its
+     * Part's text: once the human has edited, undone or deleted one, the Part is theirs again.
      */
-    readonly apply: (scope: Scope) => Effect.Effect<void, EvalError>;
+    readonly apply: (
+      scope: Scope,
+      written?: ReadonlyMap<string, string>,
+    ) => Effect.Effect<void, EvalError>;
+    /**
+     * Makes the in-Scope Parts' current text their Live code without evaluating anything, as an
+     * agent Apply on a stopped transport does (spec §5); with `written`, as `apply` does.
+     */
+    readonly setLiveCode: (
+      scope: Scope,
+      written: ReadonlyMap<string, string>,
+    ) => Effect.Effect<void>;
     /**
      * Dry-runs the composition an Apply of `scope` would evaluate once `texts` are written, each
      * keyed by a Part's identity or `preambleId` (a key the Source lacks is a new Part, at the
-     * end). Every key is in Scope, whether `scope` names it or not. Changes nothing; waits for an Apply in progress. Succeeds with its warnings, each
-     * prefixed with the Part it is in when it can be found.
+     * end). Every key is in Scope, whether `scope` names it or not. Changes nothing; waits for an
+     * Apply in progress. Succeeds with the code it evaluated and its warnings, each prefixed with
+     * the Part it is in when it can be found.
      */
     readonly dryRun: (
       scope: Scope,
       texts: ReadonlyMap<string, string>,
-    ) => Effect.Effect<ReadonlyArray<string>, Invalid>;
+    ) => Effect.Effect<DryRun, Invalid>;
   }
 >() {
   static readonly layer = Layer.effect(
@@ -58,10 +79,11 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
       // One Apply or dry-run at a time, so each composes from the Live code the last Apply left.
       const lock = yield* Effect.makeSemaphore(1);
 
-      const apply = (scope: Scope) =>
+      const apply = (scope: Scope, written: ReadonlyMap<string, string> = new Map()) =>
         lock.withPermits(1)(
           Effect.gen(function* () {
             const performance = parsePerformance(yield* editor.read);
+            if (!holds(performance, written)) return;
             const live = yield* SubscriptionRef.get(ref);
             const composition = compose(performance, live, scope);
             yield* strudel.evaluate(composition.code).pipe(
@@ -79,14 +101,24 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
           }),
         );
 
+      const setLiveCode = (scope: Scope, written: ReadonlyMap<string, string>) =>
+        lock.withPermits(1)(
+          Effect.gen(function* () {
+            const performance = parsePerformance(yield* editor.read);
+            if (!holds(performance, written)) return;
+            yield* SubscriptionRef.update(ref, (live) => liveCodeAfter(performance, live, scope));
+          }),
+        );
+
       const dryRun = (scope: Scope, texts: ReadonlyMap<string, string>) =>
         lock.withPermits(1)(
           Effect.gen(function* () {
-            const performance = withTexts(parsePerformance(yield* editor.read), texts);
-            // A text left out of Scope would land unevaluated, so every text is in it.
-            const covering: Scope =
-              scope === "every" ? scope : [...new Set([...scope, ...texts.keys()])];
-            const composition = compose(performance, yield* SubscriptionRef.get(ref), covering);
+            const composition = composeWith(
+              parsePerformance(yield* editor.read),
+              yield* SubscriptionRef.get(ref),
+              scope,
+              texts,
+            );
             const partAt = (offset: number | undefined) =>
               offset === undefined ? undefined : unitAt(composition, offset);
             const warnings = yield* strudel
@@ -104,10 +136,13 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
                   ),
                 ),
               );
-            return warnings.map(({ message, offset }) => {
-              const part = partAt(offset);
-              return part === undefined ? message : `${part}: ${message}`;
-            });
+            return {
+              code: composition.code,
+              warnings: warnings.map(({ message, offset }) => {
+                const part = partAt(offset);
+                return part === undefined ? message : `${part}: ${message}`;
+              }),
+            };
           }),
         );
 
@@ -126,7 +161,13 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
           return units.at(-1)?.id;
         });
 
-      return { current: SubscriptionRef.get(ref), changes: ref.changes, apply, dryRun };
+      return {
+        current: SubscriptionRef.get(ref),
+        changes: ref.changes,
+        apply,
+        setLiveCode,
+        dryRun,
+      };
     }),
   );
 }

@@ -1,7 +1,14 @@
-import { StateEffect } from "@codemirror/state";
+import { isolateHistory } from "@codemirror/commands";
+import { StateEffect, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { Effect, Layer, Stream } from "effect";
-import { Editor } from "../../core/Editor";
+import { Editor, SourceMoved } from "../../core/Editor";
+
+/**
+ * The user event an agent write is tagged with, so the editor can tell agent text from the human's
+ * (ADR 0007).
+ */
+export const agentWriteEvent = "agent.write";
 
 /** `Editor` over the live CodeMirror view, whose document is the Source (ADR 0006). */
 export const editorLayer = (view: EditorView) =>
@@ -32,6 +39,16 @@ export const editorLayer = (view: EditorView) =>
 
       return {
         read: Effect.sync(read),
+        // Isolated, so the human's typing just before or after never joins its undo step.
+        write: (onto, changes) =>
+          Effect.suspend(() => {
+            if (read() !== onto) return Effect.fail(new SourceMoved());
+            view.dispatch({
+              changes: [...changes],
+              annotations: [Transaction.userEvent.of(agentWriteEvent), isolateHistory.of("full")],
+            });
+            return Effect.void;
+          }),
         changes: Stream.asyncPush<string>(
           (emit) =>
             Effect.acquireRelease(

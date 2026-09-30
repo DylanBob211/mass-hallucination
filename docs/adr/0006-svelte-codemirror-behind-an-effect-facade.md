@@ -6,7 +6,8 @@ status: accepted (POC only)
 
 _Amended by ticket 08 (2026-09-29): where tests run. Amended by poc-build ticket 01 (2026-09-29):
 how the UI reads the view model, and which Effect diagnostics fail the build. Amended by poc-build
-ticket 04 (2026-09-30): the core holds Live code. See the amendments at the end._
+ticket 04 (2026-09-30): the core holds Live code. Amended by poc-build ticket 07 (2026-09-30): an
+agent write names the Source it was computed against. See the amendments at the end._
 
 **This decision covers the POC only**, like ADR 0005. The UI is a thin shell over the Effect core.
 The stack was chosen to fit what 01 and 07 demand, and the shell is kept replaceable.
@@ -169,3 +170,16 @@ Part's Live code").
 - **The Source is still the core's only copy of what the human wrote.** Live code is a record of
   what is running, never written back to the editor.
 - Unapplied edits are still derived, by comparing the Source with Live code.
+
+## Amendment: an agent write names the Source it was computed against (poc-build ticket 07)
+
+The shape above gives the `Editor` service `write(changes)`. It is `write(onto, changes)`: it
+writes only if the Source is still `onto`, and fails as `SourceMoved` otherwise.
+
+- **Why.** `change_parts` checks Revs and Unapplied edits against one reading of the Source, then
+  computes the changes from it. The human keeps typing all the while, so the write has to refuse a
+  Source that has moved on. The pipeline then checks again against the Source as it now is. Without
+  the guard, a check and the write it allows could see two different texts, and ADR 0003's rule
+  ("never on unapplied text") would rest on timing.
+- **The tag.** The live write is one transaction with the user event `agent.write` and
+  `isolateHistory`, so it is always its own undo step, even next to the human's typing.

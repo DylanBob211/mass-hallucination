@@ -1,4 +1,12 @@
-import { type Part, type Performance, parsePerformance, revOf, type Segment } from "./Performance";
+import { applyChanges, type TextChange } from "./Editor";
+import {
+  locate,
+  type Part,
+  type Performance,
+  parsePerformance,
+  revOf,
+  type Segment,
+} from "./Performance";
 
 /**
  * What is actually running (CONTEXT.md): per Part identity, and for the Preamble, the text as of
@@ -88,6 +96,17 @@ export const liveCodeAfter = (performance: Performance, live: LiveCode, scope: S
 export const deleted = (performance: Performance, live: LiveCode): Array<[string, string]> =>
   [...live.parts].filter(([id]) => !performance.parts.some((part) => part.id === id));
 
+/**
+ * Whether each of `written`, keyed as in `withTexts`, is still its unit's text in `performance`:
+ * the human has neither edited, undone nor deleted it.
+ */
+export const holds = (performance: Performance, written: ReadonlyMap<string, string>): boolean =>
+  [...written].every(([id, text]) =>
+    id === preambleId
+      ? performance.preamble.text === text.trim()
+      : performance.parts.find((part) => part.id === id)?.text === text,
+  );
+
 /** Written but not yet running (CONTEXT.md): its current text is not its Live code. */
 export const isUnapplied = (part: Part, live: LiveCode): boolean =>
   live.parts.get(part.id) !== part.text;
@@ -126,6 +145,78 @@ export const withTexts = (
     .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
     .join("\n");
   return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
+};
+
+/**
+ * The composition an Apply of `scope` evaluates once `texts` are written (see `withTexts`). Every
+ * text is in Scope, as a text left out would land unevaluated.
+ */
+export const composeWith = (
+  performance: Performance,
+  live: LiveCode,
+  scope: Scope,
+  texts: ReadonlyMap<string, string>,
+): Composition =>
+  compose(
+    withTexts(performance, texts),
+    live,
+    scope === "every" ? scope : [...new Set([...scope, ...texts.keys()])],
+  );
+
+/**
+ * The changes that write `texts` into `source`, laid out as `withTexts` lays them, so that the
+ * Source written parses to the Performance the dry-run checked. A blank line is added where a
+ * written text would otherwise run into its neighbour, such as a Preamble ending in a comment
+ * directly above a Part, which would become that Part's.
+ */
+export const writeTexts = (
+  source: string,
+  texts: ReadonlyMap<string, string>,
+): ReadonlyArray<TextChange> => {
+  const expected = layoutOf(withTexts(parsePerformance(source), texts));
+  const tight = writeTextsWith(source, texts, "");
+  return layoutOf(parsePerformance(applyChanges(source, tight))) === expected
+    ? tight
+    : writeTextsWith(source, texts, "\n");
+};
+
+const layoutOf = ({ layout }: Performance) =>
+  JSON.stringify(
+    layout.map((segment) =>
+      "part" in segment ? [segment.part.id, segment.part.text] : segment.preamble,
+    ),
+  );
+
+const writeTextsWith = (
+  source: string,
+  texts: ReadonlyMap<string, string>,
+  padding: string,
+): Array<TextChange> => {
+  const preamble = texts.get(preambleId)?.trim();
+  const changes: Array<TextChange> = [];
+  let preamblePlaced = preamble === undefined;
+  const units = locate(source);
+  for (const unit of units) {
+    if ("part" in unit) {
+      const text = texts.get(unit.part.id);
+      if (text !== undefined) changes.push({ from: unit.from, to: unit.to, insert: text });
+    } else if (preamble !== undefined) {
+      const insert = preamblePlaced || preamble === "" ? "" : preamble + padding;
+      preamblePlaced = true;
+      changes.push({ from: unit.from, to: unit.to, insert });
+    }
+  }
+  if (preamble !== undefined && !preamblePlaced && preamble !== "")
+    changes.push({ from: 0, to: 0, insert: `${preamble}\n${padding}` });
+  const added = [...texts].filter(
+    ([id]) => id !== preambleId && !units.some((unit) => "part" in unit && unit.part.id === id),
+  );
+  if (added.length > 0) {
+    const before = source === "" ? "" : source.endsWith("\n") ? padding : `\n${padding}`;
+    const insert = before + added.map(([, text]) => text).join(`\n${padding}`);
+    changes.push({ from: source.length, to: source.length, insert });
+  }
+  return changes;
 };
 
 /** The Part `text` makes, addressed as `id`. */
