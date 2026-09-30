@@ -10,15 +10,20 @@ import { LiveCodeStore } from "../../core/LiveCodeStore";
 import { Model } from "../../core/Model";
 import { ProposalStore } from "../../core/ProposalStore";
 import { takeSnapshot } from "../../core/snapshot";
-import { anthropicModel } from "./model";
+import { anthropicModel, type ModelConfig, modelConfigFromEnv } from "./model";
 
 /**
- * Against the real API, and billed: runs only with `ANTHROPIC_API_KEY` set, e.g.
- * `ANTHROPIC_API_KEY=… pnpm vitest run --project node src/facade/live/model.real.test.ts`.
- * The dry-run is faked, so this checks the model and the loop, not Strudel.
+ * Against the real API, and billed: runs only with a key, the app's from `.env.local` or else
+ * `ANTHROPIC_API_KEY`, e.g. `pnpm vitest run --project node src/facade/live/model.real.test.ts`.
+ * `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` override the app's configuration. The dry-run is
+ * faked, so this checks the model and the loop, not Strudel.
  */
-const apiKey = process.env["ANTHROPIC_API_KEY"];
-const model = process.env["ANTHROPIC_MODEL"] ?? "claude-opus-5-5";
+const fromEnvLocal = modelConfigFromEnv();
+const config: ModelConfig = {
+  ...fromEnvLocal,
+  apiKey: process.env["ANTHROPIC_API_KEY"] ?? fromEnvLocal.apiKey,
+  model: process.env["ANTHROPIC_MODEL"] ?? fromEnvLocal.model,
+};
 
 const seed = `samples('github:tidalcycles/dirt-samples')
 setcps(0.5)
@@ -36,20 +41,14 @@ const performance = Effect.gen(function* () {
       Layer.provideMerge(AutonomyStore.layer),
       Layer.provideMerge(LiveCodeStore.layer),
       Layer.provideMerge(ErrorSlotStore.layer),
-      Layer.provideMerge(
-        Layer.mergeAll(
-          editor.layer,
-          strudel.layer,
-          anthropicModel({ apiKey: apiKey ?? "", model }),
-        ),
-      ),
+      Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, anthropicModel(config))),
     ),
   );
   yield* Effect.provide(apply(), context);
   return { editor, context };
 });
 
-describe.skipIf(apiKey === undefined)("the real model", () => {
+describe.skipIf(config.apiKey === "")("the real model", () => {
   // Spec §13.3: the note before the tool call comes back as visible text.
   it.scopedLive(
     "writes a visible note before calling change_parts",
