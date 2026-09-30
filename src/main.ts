@@ -15,6 +15,8 @@ const view = createEditor("", {
   accept: () => void facade.accept(),
   acceptAndPlay: () => void facade.acceptAndPlay(),
   reject: () => void facade.reject(),
+  instruct: (instruction, part) => void facade.instruct(instruction, part),
+  stop: () => void facade.stop(),
 });
 const facade = createLiveFacade(view);
 const app = mount(App, { target, props: { facade, view } });

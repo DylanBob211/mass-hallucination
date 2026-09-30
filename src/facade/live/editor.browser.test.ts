@@ -16,6 +16,8 @@ const mounted = () => {
     accept: () => {},
     acceptAndPlay: () => {},
     reject: () => {},
+    instruct: () => {},
+    stop: () => {},
   });
   document.body.append(view.dom);
   view.focus();

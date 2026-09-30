@@ -1,14 +1,16 @@
 import { Duration, Effect, Layer } from "effect";
-import { describe, expect, it } from "vitest";
-import { makeFakeEditor, makeFakeStrudel } from "../core/fakes";
+import { describe, expect, it, vi } from "vitest";
+import { hangs, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "../core/fakes";
+import { revOf } from "../core/Performance";
 import { transportPollInterval } from "../core/ViewModelStore";
 import { createFacade, type ViewModel } from "./facade";
 
-const setup = (source: string) => {
+const setup = (source: string, replies: ReadonlyArray<unknown> = []) => {
   const editor = Effect.runSync(makeFakeEditor(source));
   const strudel = Effect.runSync(makeFakeStrudel());
-  const facade = createFacade(Layer.merge(editor.layer, strudel.layer));
-  return { editor, strudel, facade };
+  const model = makeFakeModel(replies);
+  const facade = createFacade(Layer.mergeAll(editor.layer, strudel.layer, model.layer));
+  return { editor, strudel, model, facade };
 };
 
 /** Waits out one poll of the transport on the real clock. */
@@ -28,6 +30,7 @@ describe("façade", () => {
         cycle: 0,
         parts: [],
         autonomy: "propose",
+        turns: [],
       },
     ]);
     expect(Object.isFrozen(received[0])).toBe(true);
@@ -91,6 +94,41 @@ describe("façade", () => {
     await nextPoll();
 
     expect(facade.viewModel.autonomy).toBe("write");
+    await facade.dispose();
+  });
+
+  it("instruct() asks the agent, and the view model shows the Proposal and the Turn landed", async () => {
+    const hats = 'hats: s("hh*8")';
+    const busier = 'hats: s("hh*16")';
+    const { facade, model } = setup(hats, [
+      { changes: [{ part: "hats", rev: revOf(hats), text: busier }] },
+    ]);
+    await facade.apply();
+
+    await facade.instruct("make the hats busier", "hats");
+    await nextPoll();
+
+    expect(model.requests[0]?.snapshot.aim).toBe("hats");
+    expect(facade.viewModel.proposal?.changes).toEqual([
+      { part: "hats", text: busier, added: false },
+    ]);
+    expect(facade.viewModel.turns).toMatchObject([
+      { instruction: "make the hats busier", state: "landed", landed: "proposed" },
+    ]);
+    await facade.dispose();
+  });
+
+  it("stop() stops the running Turn", async () => {
+    const { facade, model } = setup('hats: s("hh*8")', [hangs]);
+
+    const turn = facade.instruct("make the hats busier", null);
+    await vi.waitUntil(() => facade.viewModel.turns.at(-1)?.state === "writing");
+    await facade.stop();
+    await turn;
+    await nextPoll();
+
+    expect(facade.viewModel.turns).toMatchObject([{ state: "stopped" }]);
+    expect(model.aborted).toBe(1);
     await facade.dispose();
   });
 });

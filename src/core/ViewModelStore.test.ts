@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream, SubscriptionRef, TestClock } from "effect";
+import { Agent } from "./Agent";
 import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
 import { AutonomyStore } from "./AutonomyStore";
 import { ErrorSlotStore } from "./ErrorSlotStore";
-import { makeFakeEditor, makeFakeStrudel } from "./fakes";
+import { answers, makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
 import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { revOf } from "./Performance";
@@ -21,14 +22,16 @@ const withSource = (source: string) =>
     const collect = Effect.flatMap(ViewModelStore, (store) =>
       Stream.runForEach(store.changes, (vm) => SubscriptionRef.update(seen, (all) => [...all, vm])),
     );
+    const model = makeFakeModel([answers("The hats are fine as they are.")]);
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
+        Layer.provideMerge(Agent.layer),
         Layer.provideMerge(ProposalStore.layer),
         Layer.provideMerge(AgentApplies.layer),
         Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
         Layer.provideMerge(ErrorSlotStore.layer),
-        Layer.provideMerge(Layer.merge(editor.layer, strudel.layer)),
+        Layer.provideMerge(Layer.mergeAll(editor.layer, strudel.layer, model.layer)),
       ),
     );
     yield* Effect.forkScoped(Effect.provide(collect, context));
@@ -41,8 +44,9 @@ const withSource = (source: string) =>
     const applyScope = (scope?: Scope) =>
       Effect.ensuring(Effect.provide(apply(scope), context), TestClock.adjust(0));
     /** Runs `effect` against the store's services, and lets the store see what it leaves. */
-    const run = <A, E>(effect: Effect.Effect<A, E, AutonomyStore | AgentApplies | ProposalStore>) =>
-      Effect.ensuring(Effect.provide(effect, context), TestClock.adjust(0));
+    const run = <A, E>(
+      effect: Effect.Effect<A, E, AutonomyStore | AgentApplies | ProposalStore | Agent>,
+    ) => Effect.ensuring(Effect.provide(effect, context), TestClock.adjust(0));
     return { edit, applyScope, run, strudel, seen, last, tick, source: editor.read };
   });
 
@@ -60,6 +64,7 @@ describe("ViewModelStore", () => {
         autonomy: "propose",
         waitingApply: undefined,
         proposal: undefined,
+        turns: [],
       });
       expect(yield* last).toBe(initialViewModel);
     }),
@@ -81,6 +86,7 @@ describe("ViewModelStore", () => {
         autonomy: "propose",
         waitingApply: undefined,
         proposal: undefined,
+        turns: [],
       });
     }),
   );
@@ -416,6 +422,24 @@ hats: s("hh*8")`;
       expect(Object.isFrozen(open)).toBe(true);
       expect(stale).toEqual({ ...open, stale: true });
       expect((yield* last)?.proposal).toBeUndefined();
+    }),
+  );
+
+  it.scoped("shows the agent's Turns, the latest last", () =>
+    Effect.gen(function* () {
+      const { run, last } = yield* withSource('hats: s("hh*8")');
+
+      yield* run(Effect.flatMap(Agent, (agent) => agent.instruct("are the hats ok?", "hats")));
+
+      expect((yield* last)?.turns).toEqual([
+        {
+          instruction: "are the hats ok?",
+          aim: "hats",
+          state: "answered",
+          note: "The hats are fine as they are.",
+          retries: 0,
+        },
+      ]);
     }),
   );
 });

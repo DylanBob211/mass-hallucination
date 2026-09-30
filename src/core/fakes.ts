@@ -1,6 +1,6 @@
-import { Deferred, Effect, Layer, PubSub, Stream, SubscriptionRef } from "effect";
+import { Data, Deferred, Effect, Layer, PubSub, Stream, SubscriptionRef } from "effect";
 import { applyChanges, Editor, SourceMoved, type TextChange } from "./Editor";
-import { Model, type ModelEvent, type ModelRequest } from "./Model";
+import { Model, ModelError, type ModelEvent, type ModelRequest } from "./Model";
 import { EvalError, Strudel } from "./Strudel";
 import type { Transport } from "./viewModel";
 
@@ -138,27 +138,64 @@ interface Failure {
   readonly when?: (code: string) => boolean;
 }
 
+/** A reply the fake `Model` gives in place of a `change_parts` call. */
+export class Scripted extends Data.TaggedClass("Scripted")<{
+  readonly reply:
+    | { readonly answer: string }
+    | { readonly fail: string }
+    /** Writes a note, then the tool input in two pieces, then nothing until interrupted. */
+    | { readonly hang: true };
+}> {}
+
+/** The model answers `text` in words. */
+export const answers = (text: string) => new Scripted({ reply: { answer: text } });
+/** The model fails, as a network or API error. */
+export const fails = (message: string) => new Scripted({ reply: { fail: message } });
+/** The model never finishes. */
+export const hangs = new Scripted({ reply: { hang: true } });
+
 /**
- * A `Model` that answers each request with the next of `calls`, as a note and then a
- * `change_parts` call with that input; once they run out, it answers in words.
+ * A `Model` that answers each request with the next of `replies`: a note and then a
+ * `change_parts` call with that input, or what a `Scripted` reply says. Once they run out, it
+ * answers in words.
  */
-export const makeFakeModel = (calls: ReadonlyArray<unknown>) => {
+export const makeFakeModel = (replies: ReadonlyArray<unknown>) => {
   const requests: ModelRequest[] = [];
+  /** How many streams were interrupted before they ended, as a Turn stopped mid-request is. */
+  let aborted = 0;
+  const call = (input: unknown): Stream.Stream<ModelEvent, ModelError> =>
+    Stream.make<ModelEvent[]>(
+      { _tag: "Text", delta: "Changing it." },
+      { _tag: "ToolInput", partial: JSON.stringify(input) },
+      { _tag: "ToolCall", input, reply: { input } },
+    );
+  const scripted = ({ reply }: Scripted): Stream.Stream<ModelEvent, ModelError> => {
+    if ("answer" in reply) return Stream.make<ModelEvent[]>({ _tag: "Text", delta: reply.answer });
+    if ("fail" in reply) return Stream.fail(new ModelError({ message: reply.fail }));
+    return Stream.concat(
+      Stream.make<ModelEvent[]>(
+        { _tag: "Text", delta: "Working on it." },
+        { _tag: "ToolInput", partial: '{"changes":[' },
+      ),
+      Stream.never,
+    ).pipe(
+      // It ends only when interrupted.
+      Stream.ensuring(Effect.sync(() => aborted++)),
+    );
+  };
   return {
     layer: Layer.succeed(Model, {
       stream: (request) =>
-        Stream.suspend((): Stream.Stream<ModelEvent> => {
-          const input = calls[requests.length];
+        Stream.suspend(() => {
+          const reply = replies[requests.length];
           requests.push(request);
-          return input === undefined
-            ? Stream.make<ModelEvent[]>({ _tag: "Text", delta: "Nothing to change." })
-            : Stream.make<ModelEvent[]>(
-                { _tag: "Text", delta: "Changing it." },
-                { _tag: "ToolInput", partial: JSON.stringify(input) },
-                { _tag: "ToolCall", input },
-              );
+          if (reply === undefined) return scripted(answers("Nothing to change."));
+          return reply instanceof Scripted ? scripted(reply) : call(reply);
         }),
     }),
     requests,
+    get aborted() {
+      return aborted;
+    },
   };
 };

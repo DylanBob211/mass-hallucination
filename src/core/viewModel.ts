@@ -1,3 +1,4 @@
+import type { Landed } from "./changeParts";
 import type { Part } from "./Performance";
 
 /**
@@ -22,7 +23,57 @@ export interface ViewModel {
   readonly waitingApply: { readonly cycle: number } | undefined;
   /** The open Proposal (ADR 0003); `undefined` while none is open. */
   readonly proposal: ProposalView | undefined;
+  /** This session's Turns, oldest first; the last is the running or latest one. */
+  readonly turns: ReadonlyArray<TurnView>;
 }
+
+/** The agent's work on one Instruction (CONTEXT.md), as the status line shows it. */
+export interface TurnView {
+  readonly instruction: string;
+  /** The Part it was asked at, or `null` for all of them. */
+  readonly aim: string | null;
+  readonly state: TurnState;
+  /**
+   * What the model wrote in words on its latest call: the one-line note on what it is about to
+   * do, or, once it has answered, its answer.
+   */
+  readonly note: string;
+  /** How many times it retried a change `change_parts` refused. */
+  readonly retries: number;
+  /** How its change landed, once it has. */
+  readonly landed?: Landed;
+  /** What the dry-run warned of in the change that landed, each with its Part when known. */
+  readonly warnings?: ReadonlyArray<string>;
+  /** What went wrong, when the model or the network failed. */
+  readonly error?: string;
+}
+
+/**
+ * Where a Turn is (spec §10): working (`thinking`, `writing` its change, `dry-running` it), or how
+ * it ended (spec §7).
+ */
+export type TurnState =
+  | "thinking"
+  | "writing"
+  | "dry-running"
+  | "landed"
+  | "answered"
+  | "superseded"
+  | "stopped"
+  | "timed out"
+  | "out of retries"
+  | "failed";
+
+/** The states a Turn ends in. */
+export const turnEndings: ReadonlySet<TurnState> = new Set<TurnState>([
+  "landed",
+  "answered",
+  "superseded",
+  "stopped",
+  "timed out",
+  "out of retries",
+  "failed",
+]);
 
 /** An agent's change offered for review, as the inline diff shows it (ADR 0007). */
 export interface ProposalView {
@@ -80,4 +131,5 @@ export const initialViewModel: ViewModel = Object.freeze({
   autonomy: "propose",
   waitingApply: undefined,
   proposal: undefined,
+  turns: Object.freeze([]),
 });

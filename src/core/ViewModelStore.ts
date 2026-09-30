@@ -1,4 +1,5 @@
 import { Context, Effect, Layer, Schedule, Stream, SubscriptionRef } from "effect";
+import { Agent } from "./Agent";
 import { AgentApplies } from "./AgentApplies";
 import { AutonomyStore } from "./AutonomyStore";
 import { Editor } from "./Editor";
@@ -37,6 +38,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
       const autonomy = yield* AutonomyStore;
       const agentApplies = yield* AgentApplies;
       const proposals = yield* ProposalStore;
+      const agent = yield* Agent;
       const initial = withParts(
         initialViewModel,
         parsePerformance(yield* editor.read),
@@ -97,6 +99,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
       );
 
       yield* follow("proposal", proposals.changes.pipe(Stream.changes, Stream.map(proposalView)));
+      yield* follow("turns", agent.changes);
 
       return { changes: ref.changes };
     }),

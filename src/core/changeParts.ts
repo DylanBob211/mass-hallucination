@@ -18,11 +18,14 @@ const ChangePartsInput = Schema.Struct({
   ),
 });
 
+/** How a change landed, by Autonomy (ADR 0003). */
+export type Landed = "proposed" | "written" | "applied";
+
 /** What `change_parts` tells the agent (spec §6.2). */
 export type ChangePartsResult =
   | {
       readonly ok: true;
-      readonly landed: "proposed" | "written" | "applied";
+      readonly landed: Landed;
       readonly warnings?: ReadonlyArray<string>;
     }
   | {
@@ -46,9 +49,15 @@ export type ChangePartsResult =
 /**
  * The agent's one tool (spec §6.2, ADR 0004): checks the request's shape, then that every Part
  * it changes is as the agent read it and holds no Unapplied edits, then dry-runs it, and lands it
- * by Autonomy. Atomic: a refusal writes, applies and schedules nothing.
+ * by Autonomy. Atomic: a refusal writes, applies and schedules nothing. Once the checks pass,
+ * the landing and `onLanded` run together, never interrupted between them; before that,
+ * interrupting it lands nothing.
  */
-export const changeParts = (input: unknown) =>
+export const changeParts = (
+  input: unknown,
+  onLanded: (landed: Landed, warnings: ReadonlyArray<string>) => Effect.Effect<void> = () =>
+    Effect.void,
+) =>
   Effect.gen(function* () {
     const decoded = Schema.decodeUnknownEither(ChangePartsInput)(input);
     if (Either.isLeft(decoded))
@@ -85,9 +94,11 @@ export const changeParts = (input: unknown) =>
         checked = dryRun.right;
         continue;
       }
-      const landed = yield* Effect.either(land(source, changes));
+      const { warnings } = checked;
+      const landed = yield* Effect.either(
+        Effect.uninterruptible(Effect.tap(land(source, changes), (how) => onLanded(how, warnings))),
+      );
       if (Either.isRight(landed)) {
-        const { warnings } = checked;
         return {
           ok: true,
           landed: landed.right,

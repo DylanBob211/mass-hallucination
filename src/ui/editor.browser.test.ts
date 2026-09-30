@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { createEditor } from "./editor";
 import { showProposal } from "./proposal";
 
-const mounted = (source: string) => {
+const mounted = (source: string, cursor = 0) => {
   const commands = {
     apply: vi.fn(),
     stopTransport: vi.fn(),
@@ -11,9 +11,12 @@ const mounted = (source: string) => {
     accept: vi.fn(),
     acceptAndPlay: vi.fn(),
     reject: vi.fn(),
+    instruct: vi.fn(),
+    stop: vi.fn(),
   };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
+  view.dispatch({ selection: { anchor: cursor } });
   view.focus();
   return { view, commands };
 };
@@ -161,4 +164,102 @@ describe("a Proposal", () => {
     ]);
     view.destroy();
   });
+});
+
+describe("an Instruction", () => {
+  const source = 'kick: s("bd*4")\nhats: s("hh*8")\n\nsetcps(.5)';
+  const inHats = source.indexOf("hh");
+  const input = () => document.querySelector<HTMLInputElement>(".cm-instruction input");
+  const aim = () => document.querySelector(".cm-instruction-aim")?.textContent;
+
+  test("Ctrl-K opens an input under the cursor's line, aimed at the Part there", async () => {
+    const { view } = mounted(source, inHats);
+
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    expect(document.activeElement).toBe(input());
+    expect(aim()).toBe("@hats");
+    const lines = [...view.dom.querySelectorAll(".cm-line, .cm-instruction")];
+    expect(lines.map((el) => el.classList.contains("cm-instruction"))).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+    ]);
+    view.destroy();
+  });
+
+  test("Enter sends it with its aim, closes the input and gives focus back to the editor", async () => {
+    const { view, commands } = mounted(source, inHats);
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    await userEvent.keyboard("make it swing{Enter}");
+
+    expect(commands.instruct).toHaveBeenCalledExactlyOnceWith("make it swing", "hats");
+    expect(input()).toBeNull();
+    expect(view.hasFocus).toBe(true);
+    expect(view.state.doc.toString()).toBe(source);
+    view.destroy();
+  });
+
+  test("Tab switches the aim to @all and back", async () => {
+    const { view, commands } = mounted(source, inHats);
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    await userEvent.keyboard("{Tab}");
+    expect(aim()).toBe("@all");
+    await userEvent.keyboard("{Tab}");
+    expect(aim()).toBe("@hats");
+    await userEvent.keyboard("{Tab}add a bassline{Enter}");
+
+    expect(commands.instruct).toHaveBeenCalledExactlyOnceWith("add a bassline", null);
+    view.destroy();
+  });
+
+  test("on a blank line or in the Preamble it opens on @all", async () => {
+    const { view } = mounted(source, source.indexOf("\n\n") + 1);
+    await userEvent.keyboard("{Control>}k{/Control}");
+    expect(aim()).toBe("@all");
+    await userEvent.keyboard("{Escape}");
+
+    view.dispatch({ selection: { anchor: source.indexOf("setcps") } });
+    await userEvent.keyboard("{Control>}k{/Control}");
+    expect(aim()).toBe("@all");
+    view.destroy();
+  });
+
+  test("Esc cancels it, sending nothing, and gives focus back to the editor", async () => {
+    const { view, commands } = mounted(source, inHats);
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    await userEvent.keyboard("never mind{Escape}");
+
+    expect(commands.instruct).not.toHaveBeenCalled();
+    expect(commands.stop).not.toHaveBeenCalled();
+    expect(input()).toBeNull();
+    expect(view.hasFocus).toBe(true);
+    view.destroy();
+  });
+
+  test("Enter on an empty input sends nothing", async () => {
+    const { view, commands } = mounted(source, inHats);
+    await userEvent.keyboard("{Control>}k{/Control}");
+
+    await userEvent.keyboard("  {Enter}");
+
+    expect(commands.instruct).not.toHaveBeenCalled();
+    expect(input()).toBeNull();
+    view.destroy();
+  });
+});
+
+test("Esc in the editor stops the running Turn", async () => {
+  const { view, commands } = mounted('s("bd")');
+
+  await userEvent.keyboard("{Escape}");
+
+  expect(commands.stop).toHaveBeenCalledOnce();
+  expect(view.hasFocus).toBe(true);
+  view.destroy();
 });

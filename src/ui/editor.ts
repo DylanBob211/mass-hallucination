@@ -1,8 +1,9 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { Prec } from "@codemirror/state";
-import { EditorView, drawSelection, keymap } from "@codemirror/view";
+import { EditorView, drawSelection, type KeyBinding, keymap } from "@codemirror/view";
 import type { Autonomy } from "../facade/facade";
+import { type InstructionCommands, instructionInput } from "./instruction";
 import { proposalDiff, type ProposalCommands } from "./proposal";
 
 /**
@@ -29,10 +30,12 @@ const theme = EditorView.theme(
 );
 
 /** What the performer's keys ask of the Performance (spec §10). */
-export interface EditorCommands extends ProposalCommands {
+export interface EditorCommands extends ProposalCommands, InstructionCommands {
   apply(): void;
   stopTransport(): void;
   setAutonomy(autonomy: Autonomy): void;
+  /** Stops the running Turn. */
+  stop(): void;
 }
 
 const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
@@ -52,9 +55,18 @@ const proposalKeys: ReadonlyArray<[string, keyof ProposalCommands]> = [
  * Ctrl, not Mod, as spec §10 says, and ahead of the default keymap, whose Mod-Enter would insert a
  * line. Focus stays in the editor.
  */
-const performanceKeymap = (commands: EditorCommands) =>
+const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyArray<KeyBinding>) =>
   Prec.high(
     keymap.of([
+      ...instructionKeys,
+      {
+        key: "Escape",
+        // Esc also keeps its default, collapsing a multiple selection.
+        run: () => {
+          commands.stop();
+          return false;
+        },
+      },
       {
         key: "Ctrl-Enter",
         run: () => {
@@ -90,11 +102,13 @@ const performanceKeymap = (commands: EditorCommands) =>
  * The editor whose document is the Source (ADR 0001, ADR 0006): the only copy of the text. Its DOM
  * is mounted by the Editor component.
  */
-export const createEditor = (source: string, commands: EditorCommands): EditorView =>
-  new EditorView({
+export const createEditor = (source: string, commands: EditorCommands): EditorView => {
+  const instruction = instructionInput(commands);
+  return new EditorView({
     doc: source,
     extensions: [
-      performanceKeymap(commands),
+      performanceKeymap(commands, instruction.keys),
+      instruction.extension,
       history(),
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -103,3 +117,4 @@ export const createEditor = (source: string, commands: EditorCommands): EditorVi
       theme,
     ],
   });
+};

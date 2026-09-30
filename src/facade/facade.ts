@@ -1,4 +1,5 @@
 import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
+import { Agent } from "../core/Agent";
 import { AgentApplies } from "../core/AgentApplies";
 import { apply, stopTransport } from "../core/apply";
 import { AutonomyStore } from "../core/AutonomyStore";
@@ -6,6 +7,7 @@ import type { Editor } from "../core/Editor";
 import { ErrorSlotStore } from "../core/ErrorSlotStore";
 import { preambleId, type Scope } from "../core/liveCode";
 import { LiveCodeStore } from "../core/LiveCodeStore";
+import type { Model } from "../core/Model";
 import { locate } from "../core/Performance";
 import { ProposalStore } from "../core/ProposalStore";
 import type { Strudel } from "../core/Strudel";
@@ -18,8 +20,11 @@ export type {
   PartView,
   ProposalView,
   Transport,
+  TurnState,
+  TurnView,
   ViewModel,
 } from "../core/viewModel";
+export { turnEndings } from "../core/viewModel";
 export type { Surface } from "../core/Performance";
 export { preambleId, type Scope } from "../core/liveCode";
 
@@ -59,13 +64,21 @@ export interface Facade {
   acceptAndPlay(): Promise<void>;
   /** Closes the open Proposal, Stale or not, changing nothing. */
   reject(): Promise<void>;
+  /**
+   * Asks the agent `instruction`, aimed at the Part `part` (by identity), or at all of them with
+   * `null`. Supersedes the running Turn. Resolves when this Turn ends; the view model shows how.
+   */
+  instruct(instruction: string, part: string | null): Promise<void>;
+  /** Stops the running Turn. A change that has landed stays. */
+  stop(): Promise<void>;
   dispose(): Promise<void>;
 }
 
-/** The façade over the given editor and repl: live ones in the page, fakes in Node tests. */
-export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
+/** The façade over the given editor, repl and model: live ones in the page, fakes in Node tests. */
+export const createFacade = (host: Layer.Layer<Editor | Strudel | Model>): Facade => {
   const runtime = ManagedRuntime.make(
     ViewModelStore.layer.pipe(
+      Layer.provideMerge(Agent.layer),
       Layer.provideMerge(ProposalStore.layer),
       Layer.provideMerge(AgentApplies.layer),
       Layer.provideMerge(AutonomyStore.layer),
@@ -107,6 +120,9 @@ export const createFacade = (host: Layer.Layer<Editor | Strudel>): Facade => {
     acceptAndPlay: () =>
       runtime.runPromise(Effect.asVoid(Effect.flatMap(ProposalStore, (s) => s.acceptAndPlay))),
     reject: () => runtime.runPromise(Effect.flatMap(ProposalStore, (store) => store.reject)),
+    instruct: (instruction, part) =>
+      runtime.runPromise(Effect.flatMap(Agent, (agent) => agent.instruct(instruction, part))),
+    stop: () => runtime.runPromise(Effect.flatMap(Agent, (agent) => agent.stop)),
     async dispose() {
       listeners.clear();
       await runtime.runPromise(Fiber.interrupt(publishing));

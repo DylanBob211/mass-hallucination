@@ -8,9 +8,10 @@ import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeModel, makeFakeStrudel } from "./fakes";
 import { preambleId } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
-import { Model, type ModelRequest } from "./Model";
+import { Model, type Retry } from "./Model";
 import { revOf } from "./Performance";
 import { ProposalStore } from "./ProposalStore";
+import { takeSnapshot } from "./snapshot";
 import { Strudel } from "./Strudel";
 import type { Autonomy } from "./viewModel";
 
@@ -50,17 +51,22 @@ const setup = (autonomy: Autonomy, calls: ReadonlyArray<unknown>, source = seed)
     const turn = Effect.provide(
       Effect.gen(function* () {
         const results: ChangePartsResult[] = [];
-        const retries: Array<ModelRequest["retries"][number]> = [];
+        const retries: Array<Retry> = [];
+        const snapshot = yield* takeSnapshot(null);
         for (;;) {
           const events = yield* Stream.runCollect(
-            (yield* Model).stream({ instruction: "make the hats busier", retries: [...retries] }),
+            (yield* Model).stream({
+              snapshot,
+              instruction: "make the hats busier",
+              retries: [...retries],
+            }),
           );
           const call = Option.fromNullable([...events].find((event) => event._tag === "ToolCall"));
           if (Option.isNone(call)) return results;
           const result = yield* changeParts(call.value.input);
           results.push(result);
           if (result.ok) return results;
-          retries.push({ input: call.value.input, result });
+          retries.push({ call: call.value, result });
         }
       }),
       context,

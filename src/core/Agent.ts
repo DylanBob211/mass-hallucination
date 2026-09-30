@@ -1,0 +1,178 @@
+import { Context, Data, Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
+import type { AgentApplies } from "./AgentApplies";
+import type { AutonomyStore } from "./AutonomyStore";
+import { changeParts } from "./changeParts";
+import type { Editor } from "./Editor";
+import type { ErrorSlotStore } from "./ErrorSlotStore";
+import type { LiveCodeStore } from "./LiveCodeStore";
+import { Model, type Retry, type ToolCall } from "./Model";
+import type { ProposalStore } from "./ProposalStore";
+import { takeSnapshot } from "./snapshot";
+import type { Strudel } from "./Strudel";
+import { initialViewModel, type TurnState, type TurnView, turnEndings } from "./viewModel";
+
+/** How long a Turn may run before it gives up (spec §7, §12.5). */
+export const turnTimeout = "60 seconds";
+
+/** The Turn ran longer than `turnTimeout`. */
+class TurnTimedOut extends Data.TaggedError("TurnTimedOut") {}
+
+/** How many refused changes a Turn retries; the next refusal ends it (spec §12.5). */
+export const maxRetries = 3;
+
+/**
+ * The AI pair-programmer (spec §7, ADR 0005): one Turn at a time, each a fresh request with the
+ * Performance as it is when the Instruction is asked. A Turn keeps no memory past its end.
+ */
+export class Agent extends Context.Tag("Agent")<
+  Agent,
+  {
+    /**
+     * Starts a Turn on `instruction`, aimed at the Part `aim` or at all of them (`null`),
+     * superseding the running one. Completes when the Turn ends; interrupting the caller leaves
+     * the Turn running.
+     */
+    readonly instruct: (instruction: string, aim: string | null) => Effect.Effect<void>;
+    /** Stops the running Turn, if any. Never undoes a change that has landed. */
+    readonly stop: Effect.Effect<void>;
+    /** This session's Turns, oldest first. */
+    readonly turns: Effect.Effect<ReadonlyArray<TurnView>>;
+    /** The Turns now, then after every change. */
+    readonly changes: Stream.Stream<ReadonlyArray<TurnView>>;
+  }
+>() {
+  static readonly layer = Layer.scoped(
+    Agent,
+    Effect.gen(function* () {
+      const context = yield* Effect.context<
+        | Model
+        | Editor
+        | Strudel
+        | LiveCodeStore
+        | ErrorSlotStore
+        | AutonomyStore
+        | ProposalStore
+        | AgentApplies
+      >();
+      const scope = yield* Effect.scope;
+      const ref = yield* SubscriptionRef.make(initialViewModel.turns);
+      // Starting and stopping Turns one at a time, so two Instructions never both run.
+      const control = yield* Effect.makeSemaphore(1);
+      let running: { readonly index: number; readonly fiber: Fiber.RuntimeFiber<void> } | undefined;
+
+      /** Changes the Turn at `index` by `change`, unless it has ended. */
+      const update = (index: number, change: (turn: TurnView) => TurnView) =>
+        SubscriptionRef.update(ref, (turns) => {
+          const turn = turns[index];
+          if (turn === undefined || turnEndings.has(turn.state)) return turns;
+          const next = change(turn);
+          if (next === turn) return turns;
+          return Object.freeze(turns.map((t, i) => (i === index ? Object.freeze(next) : t)));
+        });
+
+      /** Ends the running Turn as `ending`, unless it has ended already. */
+      const interrupt = (ending: TurnState) =>
+        Effect.gen(function* () {
+          if (running === undefined) return;
+          const { index, fiber } = running;
+          running = undefined;
+          yield* Fiber.interrupt(fiber);
+          yield* update(index, (turn) => ({ ...turn, state: ending }));
+        });
+
+      const instruct = (instruction: string, aim: string | null) =>
+        control
+          .withPermits(1)(
+            Effect.gen(function* () {
+              yield* interrupt("superseded");
+              const index = yield* SubscriptionRef.modify(ref, (turns) => [
+                turns.length,
+                Object.freeze([
+                  ...turns,
+                  Object.freeze<TurnView>({
+                    instruction,
+                    aim,
+                    state: "thinking",
+                    note: "",
+                    retries: 0,
+                  }),
+                ]),
+              ]);
+              const turn = (change: (turn: TurnView) => TurnView) => update(index, change);
+              const fiber = yield* Effect.forkIn(
+                Effect.provide(runTurn(instruction, aim, turn), context),
+                scope,
+              );
+              running = { index, fiber };
+              return fiber;
+            }),
+          )
+          .pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
+
+      return {
+        instruct,
+        stop: control.withPermits(1)(interrupt("stopped")),
+        turns: SubscriptionRef.get(ref),
+        changes: ref.changes,
+      };
+    }),
+  );
+}
+
+/**
+ * One Turn: asks the model, passes its call to `change_parts`, and on a refusal asks again with
+ * the refused call and its result, until a change lands, the model answers in words, or it gives
+ * up. `turn` shows where it is.
+ */
+const runTurn = (
+  instruction: string,
+  aim: string | null,
+  turn: (change: (turn: TurnView) => TurnView) => Effect.Effect<void>,
+) =>
+  Effect.gen(function* () {
+    const model = yield* Model;
+    const snapshot = yield* takeSnapshot(aim);
+    // This Turn's transcript: dropped when it ends (ADR 0005).
+    const retries: Array<Retry> = [];
+    for (;;) {
+      let note = "";
+      let call: ToolCall | undefined;
+      yield* turn((t) => ({ ...t, state: "thinking", note }));
+      yield* Stream.runForEach(
+        model.stream({ snapshot, instruction, retries: [...retries] }),
+        (event) => {
+          switch (event._tag) {
+            case "Text":
+              note += event.delta;
+              return turn((t) => ({ ...t, note }));
+            case "ToolInput":
+              return turn((t) => (t.state === "writing" ? t : { ...t, state: "writing" }));
+            case "ToolCall":
+              call = event;
+              return Effect.void;
+          }
+        },
+      );
+      if (call === undefined) return yield* turn((t) => ({ ...t, state: "answered" }));
+      yield* turn((t) => ({ ...t, state: "dry-running" }));
+      const result = yield* changeParts(call.input, (landed, warnings) =>
+        turn((t) => ({ ...t, state: "landed", landed, ...(warnings.length > 0 && { warnings }) })),
+      );
+      if (result.ok) return;
+      retries.push({ call, result });
+      if (retries.length > maxRetries)
+        return yield* turn((t) => ({ ...t, state: "out of retries" }));
+      const retried = retries.length;
+      yield* turn((t) => ({ ...t, retries: retried }));
+    }
+  }).pipe(
+    Effect.timeoutFail({ duration: turnTimeout, onTimeout: () => new TurnTimedOut() }),
+    Effect.catchTags({
+      TurnTimedOut: () => turn((t) => ({ ...t, state: "timed out" })),
+      ModelError: ({ message }) => turn((t) => ({ ...t, state: "failed", error: message })),
+    }),
+    // A bug in the loop ends the Turn too, rather than leaving it running forever.
+    Effect.catchAllDefect((defect) =>
+      turn((t) => ({ ...t, state: "failed", error: String(defect) })),
+    ),
+  );
