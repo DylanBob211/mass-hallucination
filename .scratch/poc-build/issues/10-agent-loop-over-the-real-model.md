@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Spike first (spec §13.3): check Opus 5.5 at `effort: medium` returns the pre-tool note as visible text; if not, add an optional `note` field to `change_parts` and record the outcome
+- [x] Spike first (spec §13.3): check Opus 5.5 at `effort: medium` returns the pre-tool note as visible text; if not, add an optional `note` field to `change_parts` and record the outcome
 - [x] Snapshot built exactly as spec §6.1, including `aim`
 - [x] `Model` Effect service over `@anthropic-ai/sdk`: streams text deltas, partial tool input and the final call; SDK abort tied to a scope finalizer; `claude-opus-5-5`, `effort: medium`; fallback by configuration only
 - [x] Cached prefix (tool with `strict` + `eager_input_streaming`, system prompt per §7.1, the reference) with 1-hour `cache_control`; `tool_choice: auto`
@@ -19,7 +19,9 @@
 
 ## Comments
 
-**Implemented (2026-09-30).** Not yet run against the real API: this environment had no key. The spike and scenario 12.1 are written as a test that runs once a key is given (below). The first box and the second half of the last box stay open until then.
+**Implemented (2026-09-30).** The implementation environment had no key, so the spike and scenario 12.1 were written as a key-gated test (below).
+
+**Spike outcome (2026-09-30):** run against the real API with the performer's key, both real-model tests pass. With `claude-opus-5-5` at `effort: medium`, the pre-tool note arrives as visible `text` before the `change_parts` call. No `note` field is needed. Scenario 12.1, run at Write through the real model and the loop with the dry-run faked, lands a change to `hats` only. The last box stays open for the in-app check by ear (Propose, Write and Apply, with the human mid-edit in `chords`).
 
 - **Snapshot** (`src/core/snapshot.ts`): `snapshotOf` builds spec §6.1's shape from the Performance, the Live code, the transport, the error slot and the aim. The Preamble comes first as `(preamble)` when it has text, or when text it lost still plays. `live` holds the Live code of every Unapplied unit that has some, including a deleted Part still sounding. `outputs` waits for the visual dry-run (ticket 16). `takeSnapshot(aim)` takes it once per Instruction, and retries reuse it.
 - **`Model`** (`src/core/Model.ts`): a request is `{ snapshot, instruction, retries }`, where each retry is `{ call, result }`. A `ToolCall` event carries `reply`, the model's whole reply as the `Model` needs it back (thinking blocks with their signatures, the note, the `tool_use`). Only the `Model` reads it.
@@ -30,11 +32,11 @@
 - **Keys** (`src/ui/instruction.ts`): Ctrl-K opens a one-line input as a block widget under the cursor's line, aimed at the Part there. A blank line, the Preamble, or a spot between Parts gives `@all`. Tab toggles the aim, Enter sends (an empty input sends nothing), and Esc or a click away cancels. Focus goes back to the editor each way. Esc in the editor calls `stop()` and keeps its default.
 - **Tests:** `Agent.test.ts` runs the loop over the fake `Model` for every ending, retries, supersession, the timeout (TestClock) and the afresh-per-Instruction rule. `model.test.ts` runs the live `Model` over a fake `fetch` serving SSE, covering the request shape, event translation, retry messages, broken JSON, API errors, a refusal and abort-on-interrupt. `snapshot.test.ts`, the view-model and façade tests, and browser tests for Ctrl-K/Tab/Enter/Esc complete the set. The fake `Model` can now answer in words (`answers`), fail (`fails`) and hang (`hangs`), and it counts aborted streams.
 
-**To finish the spike and 12.1:** `ANTHROPIC_API_KEY=… pnpm vitest run --project node src/facade/live/model.real.test.ts` (billed; a couple of calls). The first test is spec §13.3: it passes if a non-empty note arrives as text before the call. The second runs scenario 12.1 at Write Autonomy through the real model and the loop, with the dry-run faked. After that, check 12.1 by ear in the app.
+**Re-running the real-model checks:** `pnpm vitest run --project node src/facade/live/model.real.test.ts` (billed; a couple of calls). It uses the key in `.env.local`, and `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` override it. The first test is spec §13.3: it passes if a non-empty note arrives as text before the call. The second runs scenario 12.1 at Write Autonomy through the real model and the loop, with the dry-run faked. After that, check 12.1 by ear in the app.
 
 Decisions beyond the spec:
 
-- **The note stays visible text, unverified.** Per Anthropic's docs, Opus 5.5 returns between-tool notes longer than a sentence or two as `thinking` blocks, empty unless `thinking.display: "updates"` (beta) is sent. Its pre-tool note should be one short line, which stays `text`. If the spike fails, either add the ticket's optional `note` field to `change_parts`, or request `display: "updates"` and read non-empty `thinking_delta` as the note.
+- **The note stays visible text, confirmed by the spike.** Per Anthropic's docs, Opus 5.5 returns between-tool notes longer than a sentence or two as `thinking` blocks, empty unless `thinking.display: "updates"` (beta) is sent. The one-line note stays `text`. If the note ever goes missing (a longer note, or another model as the fallback), either add an optional `note` field to `change_parts`, or request `display: "updates"` and read non-empty `thinking_delta` as the note.
 - **`disable_parallel_tool_use: true`**, so a reply holds at most one `change_parts` call, matching "at most one landed change".
 - **No server-side refusal `fallbacks`.** They would switch models automatically, which ADR 0005 rules out. A refusal ends the Turn `failed`.
 - **The landing and the Turn's `landed` state (with the warnings) are recorded uninterruptibly together** (`changeParts(input, onLanded)`). Interrupting during the checks or the dry-run lands nothing. A Turn stopped just as its change lands therefore shows `landed`, never `stopped`, and a `stopped` Turn has landed nothing (ADR 0007).
