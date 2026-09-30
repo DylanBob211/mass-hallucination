@@ -13,6 +13,9 @@ const mounted = () => {
     apply: () => {},
     stopTransport: () => {},
     setAutonomy: () => {},
+    accept: () => {},
+    acceptAndPlay: () => {},
+    reject: () => {},
   });
   document.body.append(view.dom);
   view.focus();

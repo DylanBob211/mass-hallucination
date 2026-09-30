@@ -12,6 +12,9 @@ const view = createEditor("", {
   apply: () => void facade.apply(),
   stopTransport: () => void facade.stopTransport(),
   setAutonomy: (autonomy) => void facade.setAutonomy(autonomy),
+  accept: () => void facade.accept(),
+  acceptAndPlay: () => void facade.acceptAndPlay(),
+  reject: () => void facade.reject(),
 });
 const facade = createLiveFacade(view);
 const app = mount(App, { target, props: { facade, view } });

@@ -18,7 +18,7 @@
 
 <main class="flex h-full flex-col">
   <div class="min-h-0 flex-1">
-    <Editor {view} />
+    <Editor {view} proposal={viewModel.proposal} />
   </div>
   <StatusLine {viewModel} />
 </main>

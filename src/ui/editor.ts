@@ -3,6 +3,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 import type { Autonomy } from "../facade/facade";
+import { proposalDiff, type ProposalCommands } from "./proposal";
 
 /**
  * Tailwind classes cannot reach CodeMirror's internals, so the theme reads the same CSS variables
@@ -28,7 +29,7 @@ const theme = EditorView.theme(
 );
 
 /** What the performer's keys ask of the Performance (spec §10). */
-export interface EditorCommands {
+export interface EditorCommands extends ProposalCommands {
   apply(): void;
   stopTransport(): void;
   setAutonomy(autonomy: Autonomy): void;
@@ -38,6 +39,13 @@ const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
   ["Alt-1", "propose"],
   ["Alt-2", "write"],
   ["Alt-3", "apply"],
+];
+
+/** A Stale Proposal can only be dismissed; the core refuses to accept it. */
+const proposalKeys: ReadonlyArray<[string, keyof ProposalCommands]> = [
+  ["Alt-a", "accept"],
+  ["Alt-p", "acceptAndPlay"],
+  ["Alt-r", "reject"],
 ];
 
 /**
@@ -68,6 +76,13 @@ const performanceKeymap = (commands: EditorCommands) =>
           return true;
         },
       })),
+      ...proposalKeys.map(([key, command]) => ({
+        key,
+        run: () => {
+          commands[command]();
+          return true;
+        },
+      })),
     ]),
   );
 
@@ -84,6 +99,7 @@ export const createEditor = (source: string, commands: EditorCommands): EditorVi
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       javascript(),
+      proposalDiff(commands),
       theme,
     ],
   });

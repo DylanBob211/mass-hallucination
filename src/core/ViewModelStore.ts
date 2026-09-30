@@ -6,8 +6,15 @@ import { ErrorSlotStore } from "./ErrorSlotStore";
 import { deleted, isUnapplied, type LiveCode } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { type Part, type Performance, parsePerformance } from "./Performance";
+import { type Proposal, ProposalStore } from "./ProposalStore";
 import { Strudel } from "./Strudel";
-import { initialViewModel, type PartView, type Transport, type ViewModel } from "./viewModel";
+import {
+  initialViewModel,
+  type PartView,
+  type ProposalView,
+  type Transport,
+  type ViewModel,
+} from "./viewModel";
 
 /**
  * How often transport is read. Strudel announces neither `setcps` nor the passing of cycles, so the
@@ -29,6 +36,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
       const errorSlot = yield* ErrorSlotStore;
       const autonomy = yield* AutonomyStore;
       const agentApplies = yield* AgentApplies;
+      const proposals = yield* ProposalStore;
       const initial = withParts(
         initialViewModel,
         parsePerformance(yield* editor.read),
@@ -88,10 +96,24 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
         ),
       );
 
+      yield* follow("proposal", proposals.changes.pipe(Stream.changes, Stream.map(proposalView)));
+
       return { changes: ref.changes };
     }),
   );
 }
+
+const proposalView = (proposal: Proposal | undefined): ProposalView | undefined =>
+  proposal === undefined
+    ? undefined
+    : Object.freeze({
+        changes: Object.freeze(
+          proposal.changes.map(({ part, rev, text }) =>
+            Object.freeze({ part, text, added: rev === null }),
+          ),
+        ),
+        stale: proposal.stale,
+      });
 
 const withTransport = (current: ViewModel, transport: Transport, position: number): ViewModel => {
   const cycle = Math.max(0, Math.floor(position));

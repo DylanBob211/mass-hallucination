@@ -10,6 +10,7 @@ import { preambleId } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
 import { Model, type ModelRequest } from "./Model";
 import { revOf } from "./Performance";
+import { ProposalStore } from "./ProposalStore";
 import { Strudel } from "./Strudel";
 import type { Autonomy } from "./viewModel";
 
@@ -33,7 +34,8 @@ const setup = (autonomy: Autonomy, calls: ReadonlyArray<unknown>, source = seed)
     const strudel = yield* makeFakeStrudel();
     const model = makeFakeModel(calls);
     const context = yield* Layer.build(
-      AgentApplies.layer.pipe(
+      ProposalStore.layer.pipe(
+        Layer.provideMerge(AgentApplies.layer),
         Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
         Layer.provideMerge(ErrorSlotStore.layer),
@@ -71,7 +73,22 @@ const setup = (autonomy: Autonomy, calls: ReadonlyArray<unknown>, source = seed)
       Effect.flatMap(AgentApplies, (applies) => applies.waiting.pipe(Stream.runHead)),
       context,
     );
-    return { editor, strudel, model, context, turn, liveCode, waiting, source: editor.read };
+    /** Runs `effect` against the open Proposal's store. */
+    const proposals = <A, E>(effect: (store: ProposalStore["Type"]) => Effect.Effect<A, E>) =>
+      Effect.provide(Effect.flatMap(ProposalStore, effect), context);
+    const proposal = proposals((store) => store.current);
+    return {
+      editor,
+      strudel,
+      model,
+      context,
+      turn,
+      liveCode,
+      waiting,
+      proposals,
+      proposal,
+      source: editor.read,
+    };
   });
 
 const change = (part: string, rev: string | null, text: string) => ({
@@ -487,5 +504,157 @@ describe("change_parts", () => {
         expect(strudel.evaluated[1]).toBe(seed.replace(hats, busier));
       }),
     );
+  });
+
+  describe("at Propose", () => {
+    const busier = 'hats: s("hh*16").swingBy(1/3, 4).gain(.6)';
+
+    it.scoped("opens a Proposal, and changes neither the Source nor what is heard", () =>
+      Effect.gen(function* () {
+        const { editor, strudel, turn, liveCode, proposal, source } = yield* setup("propose", [
+          change("hats", revOf(hats), busier),
+        ]);
+        const live = yield* liveCode;
+
+        const results = yield* turn;
+
+        expect(results).toEqual([{ ok: true, landed: "proposed" }]);
+        expect(yield* source).toBe(seed);
+        expect(editor.writes).toEqual([]);
+        expect(strudel.evaluated).toHaveLength(1);
+        expect(yield* liveCode).toBe(live);
+        expect(yield* proposal).toEqual({
+          changes: [{ part: "hats", rev: revOf(hats), text: busier }],
+          stale: false,
+        });
+      }),
+    );
+
+    it.scoped("replaces the open Proposal with a new one", () =>
+      Effect.gen(function* () {
+        const bass = 'bass: note("<c2 eb2>")';
+        const { turn, proposal, source } = yield* setup("propose", [
+          change("hats", revOf(hats), busier),
+          change("bass", null, bass),
+        ]);
+
+        yield* turn;
+        const results = yield* turn;
+
+        expect(results).toEqual([{ ok: true, landed: "proposed" }]);
+        expect(yield* source).toBe(seed);
+        expect(yield* proposal).toEqual({
+          changes: [{ part: "bass", rev: null, text: bass }],
+          stale: false,
+        });
+      }),
+    );
+
+    it.scoped("accept writes it into the Source as one agent write, and plays nothing", () =>
+      Effect.gen(function* () {
+        const { editor, strudel, turn, liveCode, proposals, proposal, source } = yield* setup(
+          "propose",
+          [change("hats", revOf(hats), busier)],
+        );
+        yield* turn;
+        yield* editor.type(seed.replace(".lpf(800)", ".lpf(12"));
+
+        const accepted = yield* proposals((store) => store.accept);
+
+        expect(accepted).toBe("accepted");
+        expect(yield* source).toBe(seed.replace(".lpf(800)", ".lpf(12").replace(hats, busier));
+        expect(editor.writes).toHaveLength(1);
+        expect(strudel.evaluated).toHaveLength(1);
+        expect((yield* liveCode).parts.get("hats")).toBe(hats);
+        expect(yield* proposal).toBeUndefined();
+      }),
+    );
+
+    it.scoped("reject closes it, changing nothing", () =>
+      Effect.gen(function* () {
+        const { editor, turn, proposals, proposal, source } = yield* setup("propose", [
+          change("hats", revOf(hats), busier),
+        ]);
+        yield* turn;
+
+        yield* proposals((store) => store.reject);
+
+        expect(yield* proposal).toBeUndefined();
+        expect(yield* source).toBe(seed);
+        expect(editor.writes).toEqual([]);
+        expect(yield* proposals((store) => store.accept)).toBe("none");
+      }),
+    );
+
+    it.scoped(
+      "accept & play writes it and Applies the Parts it touched at once, not at the boundary",
+      () =>
+        Effect.gen(function* () {
+          const midEdit = seed.replace(".lpf(800)", ".lpf(12");
+          const { editor, strudel, turn, liveCode, waiting, proposals, proposal, source } =
+            yield* setup("propose", [change("hats", revOf(hats), busier)]);
+          yield* strudel.setPosition(12.5);
+          yield* turn;
+          yield* editor.type(midEdit);
+
+          const accepted = yield* proposals((store) => store.acceptAndPlay);
+
+          expect(accepted).toBe("accepted");
+          expect(yield* source).toBe(midEdit.replace(hats, busier));
+          // chords plays its Live code, not the human's half-typed text.
+          expect(strudel.evaluated[1]).toBe(seed.replace(hats, busier));
+          expect((yield* liveCode).parts.get("hats")).toBe(busier);
+          expect(yield* waiting).toEqual(Option.some(undefined));
+          expect(yield* proposal).toBeUndefined();
+        }),
+    );
+
+    describe("goes Stale, lands nothing, and can then only be dismissed,", () => {
+      /** Proposes `proposed`, lets the human edit the Source with `edit`, then accepts. */
+      const staleAt = (proposed: unknown, edit: (source: string) => string) =>
+        Effect.gen(function* () {
+          const { editor, turn, proposals, proposal, source } = yield* setup("propose", [proposed]);
+          yield* turn;
+          const edited = edit(yield* source);
+          yield* editor.type(edited);
+
+          expect(yield* proposals((store) => store.accept)).toBe("stale");
+          expect(yield* proposal).toMatchObject({ stale: true });
+          expect(yield* proposals((store) => store.acceptAndPlay)).toBe("stale");
+          expect(yield* source).toBe(edited);
+          expect(editor.writes).toEqual([]);
+          yield* proposals((store) => store.reject);
+          expect(yield* proposal).toBeUndefined();
+        });
+
+      it.scoped("when the human edited one of its Parts", () =>
+        staleAt(change("hats", revOf(hats), busier), (source) =>
+          source.replace("gain(.6)", "gain(.7)"),
+        ),
+      );
+
+      it.scoped("when the human edited it and undid the edit", () =>
+        Effect.gen(function* () {
+          const { editor, turn, proposals, proposal } = yield* setup("propose", [
+            change("hats", revOf(hats), busier),
+          ]);
+          yield* turn;
+          yield* editor.type(seed.replace("gain(.6)", "gain(.7)"));
+          yield* TestClock.adjust(0);
+          yield* editor.type(seed);
+
+          expect(yield* proposal).toMatchObject({ stale: true });
+          expect(yield* proposals((store) => store.accept)).toBe("stale");
+        }),
+      );
+
+      it.scoped("when the human added a Part of the name it adds", () =>
+        staleAt(
+          change("bass", null, 'bass: note("c2")'),
+          (source) => `${source}
+bass: s("bd")`,
+        ),
+      );
+    });
   });
 });

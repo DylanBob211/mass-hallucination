@@ -20,6 +20,23 @@ export interface ViewModel {
   readonly autonomy: Autonomy;
   /** The next cycle boundary an agent Apply is waiting for; `undefined` while none waits. */
   readonly waitingApply: { readonly cycle: number } | undefined;
+  /** The open Proposal (ADR 0003); `undefined` while none is open. */
+  readonly proposal: ProposalView | undefined;
+}
+
+/** An agent's change offered for review, as the inline diff shows it (ADR 0007). */
+export interface ProposalView {
+  /**
+   * Each Part it changes, by identity or `(preamble)`, with its whole new text; `added` for a Part
+   * the Source does not have, which goes at the end.
+   */
+  readonly changes: ReadonlyArray<{
+    readonly part: string;
+    readonly text: string;
+    readonly added: boolean;
+  }>;
+  /** Its Parts were edited since it was made: it can only be dismissed. */
+  readonly stale: boolean;
 }
 
 /**
@@ -62,4 +79,5 @@ export const initialViewModel: ViewModel = Object.freeze({
   error: undefined,
   autonomy: "propose",
   waitingApply: undefined,
+  proposal: undefined,
 });

@@ -7,6 +7,8 @@ import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
 import type { Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
+import { revOf } from "./Performance";
+import { ProposalStore } from "./ProposalStore";
 import { transportPollInterval, ViewModelStore } from "./ViewModelStore";
 import { initialViewModel, type ViewModel } from "./viewModel";
 
@@ -21,6 +23,7 @@ const withSource = (source: string) =>
     );
     const context = yield* Layer.build(
       ViewModelStore.layer.pipe(
+        Layer.provideMerge(ProposalStore.layer),
         Layer.provideMerge(AgentApplies.layer),
         Layer.provideMerge(AutonomyStore.layer),
         Layer.provideMerge(LiveCodeStore.layer),
@@ -38,9 +41,9 @@ const withSource = (source: string) =>
     const applyScope = (scope?: Scope) =>
       Effect.ensuring(Effect.provide(apply(scope), context), TestClock.adjust(0));
     /** Runs `effect` against the store's services, and lets the store see what it leaves. */
-    const run = <A, E>(effect: Effect.Effect<A, E, AutonomyStore | AgentApplies>) =>
+    const run = <A, E>(effect: Effect.Effect<A, E, AutonomyStore | AgentApplies | ProposalStore>) =>
       Effect.ensuring(Effect.provide(effect, context), TestClock.adjust(0));
-    return { edit, applyScope, run, strudel, seen, last, tick };
+    return { edit, applyScope, run, strudel, seen, last, tick, source: editor.read };
   });
 
 const withStore = withSource("");
@@ -56,6 +59,7 @@ describe("ViewModelStore", () => {
         error: undefined,
         autonomy: "propose",
         waitingApply: undefined,
+        proposal: undefined,
       });
       expect(yield* last).toBe(initialViewModel);
     }),
@@ -76,6 +80,7 @@ describe("ViewModelStore", () => {
         error: undefined,
         autonomy: "propose",
         waitingApply: undefined,
+        proposal: undefined,
       });
     }),
   );
@@ -378,6 +383,39 @@ hats: s("hh*8")`;
 
       expect(waiting).toEqual({ cycle: 13 });
       expect((yield* last)?.waitingApply).toBeUndefined();
+    }),
+  );
+
+  it.scoped("shows the open Proposal, then Stale once the human edits its Part, until closed", () =>
+    Effect.gen(function* () {
+      const hats = 'hats: s("hh*8")';
+      const { applyScope, edit, run, last, source } = yield* withSource(hats);
+      yield* applyScope();
+      const propose = Effect.flatMap(ProposalStore, (store) =>
+        Effect.flatMap(source, (onto) =>
+          store.propose(onto, [
+            { part: "hats", rev: revOf(hats), text: 'hats: s("hh*16")' },
+            { part: "bass", rev: null, text: 'bass: note("c2")' },
+          ]),
+        ),
+      );
+
+      yield* run(propose);
+      const open = (yield* last)?.proposal;
+      yield* edit('hats: s("hh*4")');
+      const stale = (yield* last)?.proposal;
+      yield* run(Effect.flatMap(ProposalStore, (store) => store.reject));
+
+      expect(open).toEqual({
+        changes: [
+          { part: "hats", text: 'hats: s("hh*16")', added: false },
+          { part: "bass", text: 'bass: note("c2")', added: true },
+        ],
+        stale: false,
+      });
+      expect(Object.isFrozen(open)).toBe(true);
+      expect(stale).toEqual({ ...open, stale: true });
+      expect((yield* last)?.proposal).toBeUndefined();
     }),
   );
 });

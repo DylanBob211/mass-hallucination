@@ -1,10 +1,12 @@
 import { Effect, Either, ParseResult, Schema } from "effect";
 import { AgentApplies } from "./AgentApplies";
 import { AutonomyStore } from "./AutonomyStore";
+import { badRequest, type PartChange, type Refusal, refusalOf } from "./checks";
 import { Editor } from "./Editor";
-import { composeWith, isUnapplied, type LiveCode, preambleId, writeTexts } from "./liveCode";
+import { composeWith, preambleId, writeTexts } from "./liveCode";
 import { type DryRun, LiveCodeStore } from "./LiveCodeStore";
-import { type Performance, parsePerformance } from "./Performance";
+import { parsePerformance } from "./Performance";
+import { ProposalStore } from "./ProposalStore";
 
 /**
  * The agent's one tool's input (spec §6.2): each Part's whole new text, and the rev of the text it
@@ -15,8 +17,6 @@ const ChangePartsInput = Schema.Struct({
     Schema.Struct({ part: Schema.String, rev: Schema.NullOr(Schema.String), text: Schema.String }),
   ),
 });
-
-type PartChange = (typeof ChangePartsInput.Type)["changes"][number];
 
 /** What `change_parts` tells the agent (spec §6.2). */
 export type ChangePartsResult =
@@ -42,10 +42,6 @@ export type ChangePartsResult =
       readonly kind?: "syntax" | "name" | "argument" | "shader" | "parameter";
     }
   | { readonly ok: false; readonly reason: "bad_request"; readonly message: string };
-
-type Refusal = Extract<ChangePartsResult, { ok: false }>;
-
-const badRequest = (message: string): Refusal => ({ ok: false, reason: "bad_request", message });
 
 /**
  * The agent's one tool (spec §6.2, ADR 0004): checks the request's shape, then that every Part
@@ -89,25 +85,35 @@ export const changeParts = (input: unknown) =>
         checked = dryRun.right;
         continue;
       }
-      const written = yield* Effect.either(editor.write(source, writeTexts(source, texts)));
-      if (Either.isRight(written)) return yield* land(scope, texts, checked.warnings);
+      const landed = yield* Effect.either(land(source, changes));
+      if (Either.isRight(landed)) {
+        const { warnings } = checked;
+        return {
+          ok: true,
+          landed: landed.right,
+          ...(warnings.length > 0 && { warnings }),
+        } satisfies ChangePartsResult;
+      }
     }
   });
 
-/** Lands a written change by Autonomy. Propose writes until Proposals exist (ticket 08). */
-const land = (
-  scope: ReadonlyArray<string>,
-  texts: ReadonlyMap<string, string>,
-  warnings: ReadonlyArray<string>,
-) =>
+/**
+ * Lands checked `changes` onto `source` by Autonomy (ADR 0003): as the open Proposal, or written,
+ * or written and then Applied by the agent. Fails as `SourceMoved`, landing nothing, once the
+ * Source is no longer `source`.
+ */
+const land = (source: string, changes: ReadonlyArray<PartChange>) =>
   Effect.gen(function* () {
     const autonomy = yield* (yield* AutonomyStore).current;
-    if (autonomy === "apply") yield* (yield* AgentApplies).schedule(scope, texts);
-    return {
-      ok: true,
-      landed: autonomy === "apply" ? "applied" : "written",
-      ...(warnings.length > 0 && { warnings }),
-    } satisfies ChangePartsResult;
+    if (autonomy === "propose") {
+      yield* (yield* ProposalStore).propose(source, changes);
+      return "proposed" as const;
+    }
+    const texts = new Map(changes.map(({ part, text }) => [part, text]));
+    yield* (yield* Editor).write(source, writeTexts(source, texts));
+    if (autonomy === "write") return "written" as const;
+    yield* (yield* AgentApplies).schedule([...texts.keys()], texts);
+    return "applied" as const;
   });
 
 /**
@@ -134,40 +140,6 @@ const malformed = (changes: ReadonlyArray<PartChange>): Refusal | undefined => {
           `${part}'s text is labelled ${only.id}; only its mute and solo marks may change`,
         );
     }
-  }
-  return undefined;
-};
-
-/**
- * Why the Source as it is now refuses the request, in the spec's order: a Part it does not know
- * or a new Part whose name is taken, then a Part changed since the agent read it, then a Part
- * holding the human's Unapplied edits.
- */
-const refusalOf = (
-  performance: Performance,
-  live: LiveCode,
-  changes: ReadonlyArray<PartChange>,
-): Refusal | undefined => {
-  const unitOf = (id: string) =>
-    id === preambleId ? performance.preamble : performance.parts.find((part) => part.id === id);
-  for (const { part, rev } of changes) {
-    const exists = unitOf(part) !== undefined;
-    if (rev !== null && !exists) return badRequest(`there is no Part ${part}`);
-    if (rev === null && exists) return badRequest(`${part} exists; send the rev you read`);
-  }
-  for (const { part, rev } of changes) {
-    const unit = unitOf(part);
-    if (rev !== null && unit !== undefined && unit.rev !== rev)
-      return { ok: false, reason: "stale", part, rev: unit.rev, text: unit.text };
-  }
-  for (const { part } of changes) {
-    const unapplied =
-      part === preambleId
-        ? live.preamble !== performance.preamble.text
-        : performance.parts.some((p) => p.id === part && isUnapplied(p, live)) ||
-          // A new Part on a deleted one still sounding would undo the human's deletion.
-          (!performance.parts.some((p) => p.id === part) && live.parts.has(part));
-    if (unapplied) return { ok: false, reason: "unapplied", part };
   }
   return undefined;
 };
