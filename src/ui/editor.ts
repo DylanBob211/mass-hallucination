@@ -6,6 +6,7 @@ import type { Autonomy } from "../facade/facade";
 import { agentMarks } from "./agentMarks";
 import { agentWork } from "./agentWork";
 import { type InstructionCommands, instructionInput } from "./instruction";
+import { overVisuals } from "./overVisuals";
 import { proposalDiff, type ProposalCommands } from "./proposal";
 
 /**
@@ -44,6 +45,8 @@ export interface EditorCommands extends ProposalCommands, InstructionCommands {
   closePeek(): boolean;
   /** Hands the performer the instrumentation log to save (spec §11). */
   downloadLog(): void;
+  /** Steps the code over the visuals: all → the Part in focus only → none (ADR 0007). */
+  cycleCodeView(): void;
 }
 
 const autonomyKeys: ReadonlyArray<[string, Autonomy]> = [
@@ -88,6 +91,13 @@ const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyAr
         key: "Alt-l",
         run: () => {
           commands.downloadLog();
+          return true;
+        },
+      },
+      {
+        key: "Alt-h",
+        run: () => {
+          commands.cycleCodeView();
           return true;
         },
       },
@@ -140,6 +150,7 @@ export const createEditor = (source: string, commands: EditorCommands): EditorVi
       proposalDiff(commands),
       agentWork,
       agentMarks,
+      overVisuals,
       theme,
     ],
   });

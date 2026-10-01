@@ -2,6 +2,7 @@ import { mount, unmount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";
 import { createLiveFacade } from "./facade/live";
+import { CodeViewState } from "./ui/codeView.svelte";
 import { createEditor } from "./ui/editor";
 import { PeekState } from "./ui/peekState.svelte";
 
@@ -9,6 +10,7 @@ const target = document.getElementById("app");
 if (!target) throw new Error("#app is missing from index.html");
 
 const peek = new PeekState();
+const codeView = new CodeViewState();
 // The keys reach the façade only once it exists, which needs the view first.
 const view = createEditor("", {
   apply: () => void facade.apply(),
@@ -24,13 +26,16 @@ const view = createEditor("", {
   },
   closePeek: () => peek.close(),
   downloadLog: () => void facade.downloadLog(),
+  cycleCodeView: () => {
+    codeView.cycle();
+  },
 });
 const facade = createLiveFacade(view);
 // The peek opens itself on a word answer (ADR 0007), whether or not anything renders it.
 const seeTurns = facade.subscribe(({ turns }) => {
   peek.see(turns);
 });
-const app = mount(App, { target, props: { facade, view, peek } });
+const app = mount(App, { target, props: { facade, view, peek, codeView } });
 
 import.meta.hot?.dispose(() => {
   void unmount(app)

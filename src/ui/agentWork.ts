@@ -8,7 +8,7 @@ import {
   type TurnView,
   turnEndings,
 } from "../facade/facade";
-import { blockPlace } from "./place";
+import { blockPlace, labelLine } from "./place";
 
 /** What the editor shows of the agent's work, from the view model. */
 export interface AgentWork {
@@ -97,14 +97,6 @@ const decorationsOf = (state: EditorState, work: AgentWork | undefined): Decorat
         ),
       );
   return Decoration.set(decorations, true);
-};
-
-/** The end of a Part's label line: its first line that is not a leading comment. */
-const labelLine = (state: EditorState, from: number, to: number): number => {
-  let line = state.doc.lineAt(from);
-  while (line.to < to && /^\s*(\/\/|\/\*|\*)/.test(line.text))
-    line = state.doc.line(line.number + 1);
-  return line.to;
 };
 
 /** A block of code the agent shows, on a solid panel (ADR 0007 amendment). */

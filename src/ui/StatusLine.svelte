@@ -1,7 +1,8 @@
 <script lang="ts">
   import { turnEndings, type ViewModel } from "../facade/facade";
+  import type { CodeView } from "./codeView.svelte";
 
-  let { viewModel }: { viewModel: ViewModel } = $props();
+  let { viewModel, codeView }: { viewModel: ViewModel; codeView: CodeView } = $props();
 
   const transport = $derived(viewModel.transport);
   const error = $derived(viewModel.error);
@@ -15,8 +16,13 @@
   const autonomyLabels = { propose: "1 propose", write: "2 write", apply: "3 apply" } as const;
 </script>
 
+<!-- On a panel over the visuals, thinned while the code is hidden (ADR 0007 amendment). Never
+     fully opaque: Chromium then culls the canvas beneath it, and headless Chromium culls the
+     wrong edge of it. -->
 <footer
-  class="flex h-7 items-center gap-4 border-t border-white/10 px-3 font-mono text-sm text-dim"
+  class="flex h-7 items-center gap-4 border-t px-3 font-mono text-sm text-dim {codeView === 'none'
+    ? 'border-transparent bg-panel/80'
+    : 'border-white/10 bg-panel/95'}"
 >
   <span class="shrink-0 text-fg" title="Autonomy: Alt-1 propose, Alt-2 write, Alt-3 apply">
     {autonomyLabels[viewModel.autonomy]}
@@ -50,6 +56,11 @@
   {#if error}
     <span class="min-w-0 truncate text-error" title={error.message}>
       ✕ {error.phase === "eval" ? "eval" : "playing"}{error.part ? ` in ${error.part}` : ""}: {error.message}
+    </span>
+  {/if}
+  {#if codeView !== "all"}
+    <span class="shrink-0" title="Alt-H: all code, the Part in focus only, no code">
+      {codeView === "focus" ? "focus only" : "code hidden"}
     </span>
   {/if}
   <span class="shrink-0 {transport.started ? 'text-fg' : ''}">

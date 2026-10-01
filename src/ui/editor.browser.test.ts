@@ -1,8 +1,10 @@
+import type { EditorView } from "@codemirror/view";
 import { userEvent } from "@vitest/browser/context";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { PartView, TurnView } from "../facade/facade";
 import { showAgentWork } from "./agentWork";
 import { createEditor } from "./editor";
+import { showCodeView, showVisualError } from "./overVisuals";
 import { showProposal } from "./proposal";
 
 const mounted = (source: string, cursor = 0) => {
@@ -18,6 +20,7 @@ const mounted = (source: string, cursor = 0) => {
     togglePeek: vi.fn(),
     closePeek: vi.fn(() => false),
     downloadLog: vi.fn(),
+    cycleCodeView: vi.fn(),
   };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
@@ -403,6 +406,157 @@ describe("the agent at work", () => {
 
     view.dispatch({ effects: showAgentWork.of({ turn: undefined, draft: undefined, parts }) });
     expect(view.dom.querySelectorAll(".cm-ghost")).toHaveLength(0);
+    view.destroy();
+  });
+});
+
+describe("over the visuals", () => {
+  const source =
+    'kick: s("bd*4")\n// the hats\nhats: s("hh*8")\n  .gain(.6)\nviz: hydra`osc().out()`';
+  const lineTexts = (view: EditorView, selector: string) =>
+    [...view.dom.querySelectorAll(selector)].map((line) => line.firstChild?.textContent ?? "");
+  const banded = (view: EditorView) => lineTexts(view, ".cm-line.cm-focus-line");
+  const turn = (state: TurnView["state"], aim: string | null): TurnView => ({
+    instruction: "make it busier",
+    aim,
+    state,
+    note: "",
+    retries: 0,
+  });
+
+  test("the cursor's Part sits on a full-width band, and the band follows the cursor", () => {
+    const { view } = mounted(source, source.indexOf("gain"));
+    expect(banded(view)).toEqual(["// the hats", 'hats: s("hh*8")', "  .gain(.6)"]);
+
+    view.dispatch({ selection: { anchor: 0 } });
+    expect(banded(view)).toEqual(['kick: s("bd*4")']);
+    view.destroy();
+  });
+
+  test("the band is as wide as the editor, every other line's box only as wide as its text", () => {
+    const { view } = mounted(source, 0);
+    const width = (text: string) =>
+      [...view.dom.querySelectorAll<HTMLElement>(".cm-line")]
+        .find((line) => line.textContent === text)
+        ?.getBoundingClientRect().width;
+
+    expect(width('kick: s("bd*4")')).toBe(view.contentDOM.getBoundingClientRect().width);
+    expect(width("  .gain(.6)")).toBeLessThan(width('kick: s("bd*4")') ?? 0);
+    expect(getComputedStyle(view.dom).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    view.destroy();
+  });
+
+  test("while a Turn runs or a Proposal is open, the band is on the Parts the agent works on", () => {
+    const { view } = mounted(source, 0);
+
+    view.dispatch({
+      effects: showAgentWork.of({ turn: turn("thinking", "viz"), draft: undefined, parts: [] }),
+    });
+    expect(banded(view)).toEqual(["viz: hydra`osc().out()`"]);
+
+    view.dispatch({
+      effects: [
+        showAgentWork.of({ turn: turn("landed", "viz"), draft: undefined, parts: [] }),
+        showProposal.of({
+          changes: [
+            { part: "hats", text: 'hats: s("hh*16")', added: false },
+            { part: "viz", text: "viz: hydra`osc(2).out()`", added: false },
+          ],
+          stale: false,
+        }),
+      ],
+    });
+    expect(banded(view)).toEqual([
+      "// the hats",
+      'hats: s("hh*8")',
+      "  .gain(.6)",
+      "viz: hydra`osc().out()`",
+    ]);
+
+    view.dispatch({ effects: showProposal.of(undefined) });
+    expect(banded(view)).toEqual(['kick: s("bd*4")']);
+    view.destroy();
+  });
+
+  test("Alt-H cycles the code view, and focus stays in the editor", async () => {
+    const { view, commands } = mounted(source);
+
+    await userEvent.keyboard("{Alt>}h{/Alt}");
+
+    expect(commands.cycleCodeView).toHaveBeenCalledOnce();
+    expect(view.state.doc.toString()).toBe(source);
+    expect(view.hasFocus).toBe(true);
+    view.destroy();
+  });
+
+  test("with the Part in focus only, the other lines and the ghosts are hidden", () => {
+    const { view } = mounted(source, 0);
+    view.dispatch({
+      effects: [
+        showCodeView.of("focus"),
+        showAgentWork.of({
+          turn: undefined,
+          draft: undefined,
+          parts: [
+            {
+              id: "bass",
+              muted: false,
+              soloed: false,
+              surface: "audio",
+              unapplied: true,
+              deleted: true,
+              live: 'bass: note("c2")',
+            },
+          ],
+        }),
+      ],
+    });
+
+    const visible = [...view.dom.querySelectorAll(".cm-line, .cm-ghost")]
+      .filter((el) => getComputedStyle(el).visibility === "visible")
+      .map((el) => el.textContent);
+    expect(visible).toEqual(['kick: s("bd*4")']);
+    view.destroy();
+  });
+
+  test("with no code, nothing shows, yet keys still work and focus stays in the editor", async () => {
+    const { view, commands } = mounted(source, 0);
+    view.dispatch({ effects: showCodeView.of("none") });
+
+    const visible = [...view.dom.querySelectorAll(".cm-line, .cm-cursor")].filter(
+      (el) => getComputedStyle(el).visibility === "visible",
+    );
+    expect(visible).toEqual([]);
+
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+    expect(commands.apply).toHaveBeenCalledOnce();
+    expect(view.hasFocus).toBe(true);
+
+    view.dispatch({ effects: showCodeView.of("all") });
+    expect(lineTexts(view, ".cm-line")).toHaveLength(5);
+    expect(
+      [...view.dom.querySelectorAll(".cm-line")].every(
+        (el) => getComputedStyle(el).visibility === "visible",
+      ),
+    ).toBe(true);
+    view.destroy();
+  });
+
+  test("a Visual Part's error is a badge on its label line", () => {
+    const { view } = mounted(source, 0);
+    const badges = () =>
+      [...view.dom.querySelectorAll(".cm-error-badge")].map((badge) => [
+        badge.closest(".cm-line")?.firstChild?.textContent,
+        badge.textContent,
+      ]);
+
+    view.dispatch({
+      effects: showVisualError.of({ message: "o0 froze", phase: "playback", part: "viz" }),
+    });
+    expect(badges()).toEqual([["viz: hydra`osc().out()`", "✕ playing"]]);
+
+    view.dispatch({ effects: showVisualError.of(undefined) });
+    expect(badges()).toEqual([]);
     view.destroy();
   });
 });
