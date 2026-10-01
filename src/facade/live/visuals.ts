@@ -1,10 +1,13 @@
 import { parse } from "acorn";
+import type { Output, Source } from "hydra-synth";
 import { hydraTemplateOf, parseOptions, readLabel } from "../../core/Performance";
+import type { PlaybackError } from "../../core/Strudel";
 
 /**
  * The host's Hydra glue in place of `@strudel/hydra` (spec §8, ADR 0002 amendment): one live
  * `hydra-synth` drawing on a fixed, full-screen canvas behind the page, and the `hydra` tag that
- * runs each Visual Part's body on it.
+ * runs each Visual Part's body on it. A Visual Part that fails while drawing is reported, once
+ * per evaluate, and keeps drawing as Hydra lets it.
  */
 export interface Visuals {
   /**
@@ -36,10 +39,15 @@ export class VisualError extends Error {
   }
 }
 
+/** A function a Visual Part gives Hydra to call on every frame. */
+type PerFrame = (...args: Array<unknown>) => unknown;
+
 /** A Visual Part in the code being evaluated. */
 interface VisualPart {
   /** Its label as written, marks included, as the transpiler passes it to `.p`. */
   readonly label: string;
+  /** Its identity, which a playback error names. */
+  readonly id: string;
   /** Where its body starts in the code. */
   readonly bodyStart: number;
   /** Where the body's first `${` is, if it has one. */
@@ -48,8 +56,14 @@ interface VisualPart {
   readonly skipped: boolean;
 }
 
-/** Builds the canvas and the live Hydra; `silence` is what the tag gives Strudel. */
-export const createVisuals = async (silence: unknown): Promise<Visuals> => {
+/**
+ * Builds the canvas and the live Hydra; `silence` is what the tag gives Strudel. Each Visual Part
+ * that fails while drawing goes to `onPlaybackError` the first time it does after an evaluate.
+ */
+export const createVisuals = async (
+  silence: unknown,
+  onPlaybackError: (error: PlaybackError) => void,
+): Promise<Visuals> => {
   const { default: Hydra } = await import("hydra-synth");
   const canvas = document.createElement("canvas");
   Object.assign(canvas.style, {
@@ -73,6 +87,71 @@ export const createVisuals = async (silence: unknown): Promise<Visuals> => {
     detectAudio: false,
     enableStreamCapture: false,
   });
+
+  // The Part whose body is running, if one is.
+  let running: string | undefined;
+  // The Part that last drew into each output since the evaluate.
+  const writers = new Map<Output, string>();
+  // The Parts reported since the evaluate.
+  const failed = new Set<string>();
+  const fail = (part: string, error: unknown) => {
+    if (failed.has(part)) return;
+    failed.add(part);
+    onPlaybackError({ message: error instanceof Error ? error.message : String(error), part });
+  };
+  const blamed = new WeakSet();
+  /** `fn`, telling `fail` of `part` when it throws; Hydra catches the throw and goes on. */
+  const blaming = (part: string, fn: PerFrame) => {
+    if (blamed.has(fn)) return fn;
+    const wrapped = (...args: Array<unknown>) => {
+      try {
+        return fn(...args);
+      } catch (error) {
+        fail(part, error);
+        throw error;
+      }
+    };
+    blamed.add(wrapped);
+    return wrapped;
+  };
+
+  // `out` is where a Part's chain, nested sources included, reaches Hydra: Hydra then calls its
+  // parameter functions on every frame, and draws into the output on every tick.
+  const source = Object.getPrototypeOf(hydra.synth.solid(0, 0, 0, 0)) as Source;
+  const { out } = source;
+  source.out = function (this: Source, output) {
+    const part = running;
+    if (part !== undefined) {
+      blameFunctionsIn(this, (fn) => blaming(part, fn));
+      writers.set(output ?? this.defaultOutput, part);
+    }
+    out.call(this, output);
+  };
+  const gl = hydra.regl._gl;
+  for (const output of hydra.o) {
+    const tick = output.tick.bind(output);
+    output.tick = (props) => {
+      const part = writers.get(output);
+      if (part === undefined) {
+        tick(props);
+        return;
+      }
+      try {
+        tick(props);
+      } catch (error) {
+        fail(part, error);
+        throw error;
+      }
+      // A failed draw throws nothing and leaves the output as it was: frozen. WebGL keeps an
+      // error until it is read, so one raised elsewhere since the last check (Hydra's own final
+      // render, an output no Part wrote) is blamed here too. Only outputs a Part wrote are
+      // checked, as each check waits on the GPU.
+      const code = gl.getError();
+      if (code !== gl.NO_ERROR)
+        fail(part, `WebGL ${glErrorName(gl, code)} while drawing ${output.label}`);
+    };
+  }
+
   let frame = requestAnimationFrame(function draw(then: number) {
     frame = requestAnimationFrame((now) => {
       hydra.tick(now - then);
@@ -84,7 +163,12 @@ export const createVisuals = async (silence: unknown): Promise<Visuals> => {
   };
   addEventListener("resize", resize);
 
-  const scope = hydraScope(hydra.synth);
+  const scope = hydraScope(hydra.synth, (name, value) =>
+    // Hydra calls these on every frame, as it does a parameter function.
+    (name === "update" || name === "afterUpdate") && typeof value === "function" && running
+      ? blaming(running, value as PerFrame)
+      : value,
+  );
   let parts: Array<VisualPart> = [];
 
   return {
@@ -101,7 +185,12 @@ export const createVisuals = async (silence: unknown): Promise<Visuals> => {
             "a hydra template takes no ${…}: only Hydra's names are in scope",
             part.firstInterpolationAt,
           );
-        run(strings.raw[0] ?? "", part.bodyStart, scope);
+        running = part.id;
+        try {
+          run(strings.raw[0] ?? "", part.bodyStart, scope);
+        } finally {
+          running = undefined;
+        }
         return silence;
       },
     }),
@@ -111,6 +200,10 @@ export const createVisuals = async (silence: unknown): Promise<Visuals> => {
       synth.render(hydra.o[0]);
       synth.update = () => {};
       synth.afterUpdate = () => {};
+      writers.clear();
+      failed.clear();
+      // Errors are kept until read: drop those from before, so none is blamed on the new Parts.
+      for (let left = 8; left > 0 && gl.getError() !== gl.NO_ERROR; left--);
       parts = visualPartsIn(code);
     },
     dispose: () => {
@@ -146,8 +239,9 @@ const visualPartsIn = (code: string): Array<VisualPart> => {
     return [{ label, bodyStart: first.start, firstInterpolationAt: first.end, ...marks }];
   });
   const soloing = parts.some((part) => part.soloed);
-  return parts.map(({ label, bodyStart, firstInterpolationAt, muted, soloed }) => ({
+  return parts.map(({ label, id, bodyStart, firstInterpolationAt, muted, soloed }) => ({
     label,
+    id,
     bodyStart,
     firstInterpolationAt,
     skipped: muted || (soloing && !soloed),
@@ -172,12 +266,41 @@ const run = (body: string, from: number, scope: object) => {
   }
 };
 
+/** Replaces each function in `source`'s chain, and in the sources it is given, by `wrap`'s. */
+const blameFunctionsIn = (source: Source, wrap: (fn: PerFrame) => PerFrame) => {
+  for (const { userArgs } of source.transforms)
+    userArgs.forEach((arg, index) => {
+      if (typeof arg === "function") userArgs[index] = wrap(arg as PerFrame);
+      else if (isSource(arg)) blameFunctionsIn(arg, wrap);
+    });
+};
+
+const isSource = (value: unknown): value is Source =>
+  typeof value === "object" && value !== null && "transforms" in value;
+
+/** The WebGL constant's name for an error `code`. */
+const glErrorName = (gl: WebGLRenderingContext, code: number) =>
+  (
+    [
+      "INVALID_ENUM",
+      "INVALID_VALUE",
+      "INVALID_OPERATION",
+      "INVALID_FRAMEBUFFER_OPERATION",
+      "OUT_OF_MEMORY",
+      "CONTEXT_LOST_WEBGL",
+    ] as const
+  ).find((name) => gl[name] === code) ?? `error ${String(code)}`;
+
 /**
  * The names a Visual Part's body sees: Hydra's, and JavaScript's own. Everything else on
  * `globalThis`, Strudel's names included, is hidden, so `speed` or `sine` is not defined there. A
  * name the body assigns without declaring it is kept here, not on `globalThis`, so nothing leaks.
+ * What it assigns to one of Hydra's names goes through `assigning` first.
  */
-const hydraScope = (synth: Record<string, unknown>): object => {
+const hydraScope = (
+  synth: Record<string, unknown>,
+  assigning: (name: string, value: unknown) => unknown,
+): object => {
   const assigned = new Map<string, unknown>();
   return new Proxy(Object.create(null) as object, {
     has: (_, name) => typeof name === "string" && !languageGlobals.has(name),
@@ -189,7 +312,7 @@ const hydraScope = (synth: Record<string, unknown>): object => {
     },
     set: (_, name, value) => {
       if (typeof name !== "string") return false;
-      if (name in synth) synth[name] = value;
+      if (name in synth) synth[name] = assigning(name, value);
       else assigned.set(name, value);
       return true;
     },

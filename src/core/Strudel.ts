@@ -27,6 +27,12 @@ export interface LateNote {
   readonly where: "scheduler" | "output";
 }
 
+/** An error the playing code threw, and the Visual Part that threw it when it was one. */
+export interface PlaybackError {
+  readonly message: string;
+  readonly part?: string;
+}
+
 /** The embedded `@strudel/web` repl (ADR 0002). */
 export class Strudel extends Context.Tag("Strudel")<
   Strudel,
@@ -44,8 +50,11 @@ export class Strudel extends Context.Tag("Strudel")<
     readonly transport: Effect.Effect<Transport>;
     /** The scheduler's position in fractional cycles; 0 while stopped. */
     readonly position: Effect.Effect<number>;
-    /** The message of each error the playing pattern throws after evaluate, from now on. */
-    readonly playbackErrors: Stream.Stream<string>;
+    /**
+     * Each error the playing code throws after evaluate, from now on: the pattern's, each time, and
+     * each Visual Part's first since the evaluate that ran it (spec §8).
+     */
+    readonly playbackErrors: Stream.Stream<PlaybackError>;
     /** Each late note from now on (spec §11). */
     readonly lateNotes: Stream.Stream<LateNote>;
   }

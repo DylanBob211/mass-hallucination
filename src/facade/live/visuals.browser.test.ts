@@ -1,13 +1,13 @@
 import { page, userEvent } from "@vitest/browser/context";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, type Scope, Stream } from "effect";
 import { beforeEach, expect, test } from "vitest";
 import { ErrorSlotStore } from "../../core/ErrorSlotStore";
 import { makeFakeEditor } from "../../core/fakes";
 import { LiveCodeStore } from "../../core/LiveCodeStore";
-import { Strudel } from "../../core/Strudel";
+import { type PlaybackError, Strudel } from "../../core/Strudel";
 import { StrudelLive } from "./strudel";
 
-const withStrudel = <A, E>(use: (strudel: Strudel["Type"]) => Effect.Effect<A, E>) =>
+const withStrudel = <A, E>(use: (strudel: Strudel["Type"]) => Effect.Effect<A, E, Scope.Scope>) =>
   Effect.runPromise(Effect.scoped(Effect.flatMap(Strudel, use).pipe(Effect.provide(StrudelLive))));
 
 /** The colour on screen at the middle of the page, once the canvas has drawn a few frames. */
@@ -149,5 +149,117 @@ test.each([
     );
 
     expect(slot).toMatchObject({ phase: "eval", part: "viz" });
+  },
+);
+
+/** Evaluates `code`, and gives the playback errors and the colour seen over the frames after. */
+const playing = (code: string, during: (gl: WebGLRenderingContext) => void = () => {}) =>
+  withStrudel((strudel) =>
+    Effect.gen(function* () {
+      const errors: Array<PlaybackError> = [];
+      yield* Effect.forkScoped(
+        Stream.runForEach(strudel.playbackErrors, (error) => Effect.sync(() => errors.push(error))),
+      );
+      yield* strudel.evaluate(code);
+      const gl = document.querySelector("canvas")?.getContext("webgl");
+      if (!gl) throw new Error("no WebGL context on the canvas");
+      during(gl);
+      // A few frames: each would throw again.
+      yield* seen;
+      const colour = yield* seen;
+      return { errors, colour };
+    }),
+  );
+
+test(
+  "a throwing parameter function is reported once, with its Part, and its Part keeps drawing",
+  { timeout: 20_000 },
+  async () => {
+    const { errors, colour } = await playing("viz: hydra`solid(1, () => nope, 0).out()`");
+
+    expect(errors).toEqual([{ message: "nope is not defined", part: "viz" }]);
+    // Hydra draws the throwing parameter at its default.
+    expect(colour).toEqual(red);
+  },
+);
+
+test(
+  "a parameter function nested in a source is blamed on its Part",
+  { timeout: 20_000 },
+  async () => {
+    const { errors } = await playing(
+      "glow: hydra`solid(0, 0, 1).out(o1)`\nviz: hydra`src(o1).blend(solid(() => nope), 0.5).out()`",
+    );
+
+    expect(errors).toEqual([{ message: "nope is not defined", part: "viz" }]);
+  },
+);
+
+test("a throwing update is blamed on its Part", { timeout: 20_000 }, async () => {
+  const { errors } = await playing("viz: hydra`solid(1, 0, 0).out(); update = () => nope`");
+
+  expect(errors).toEqual([{ message: "nope is not defined", part: "viz" }]);
+});
+
+test(
+  "a WebGL error is blamed on the Part that last wrote the output it froze",
+  { timeout: 20_000 },
+  async () => {
+    const { errors } = await playing(
+      "glow: hydra`solid(0, 0, 1).out(o0)`\nviz: hydra`solid(1, 0, 0).out(o1); render(o1)`",
+      (gl) => {
+        gl.enable(0xbeef);
+      },
+    );
+
+    expect(errors).toEqual([{ message: "WebGL INVALID_ENUM while drawing o0", part: "glow" }]);
+  },
+);
+
+test("an evaluate reports its Parts' failures afresh", { timeout: 20_000 }, async () => {
+  const errors = await withStrudel((strudel) =>
+    Effect.gen(function* () {
+      const errors: Array<PlaybackError> = [];
+      yield* Effect.forkScoped(
+        Stream.runForEach(strudel.playbackErrors, (error) => Effect.sync(() => errors.push(error))),
+      );
+      yield* strudel.evaluate("viz: hydra`solid(() => nope).out()`");
+      yield* seen;
+      yield* strudel.evaluate("viz: hydra`solid(() => nope).out()`");
+      yield* seen;
+      return errors;
+    }),
+  );
+
+  expect(errors).toHaveLength(2);
+});
+
+test(
+  "a throwing parameter function reaches the error slot with its Part",
+  { timeout: 20_000 },
+  async () => {
+    const source = "viz: hydra`solid(1, () => nope, 0).out()`";
+    const slot = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const editor = yield* makeFakeEditor(source);
+          return yield* Effect.gen(function* () {
+            const store = yield* LiveCodeStore;
+            yield* store.apply("every");
+            yield* seen;
+            return yield* Effect.flatMap(ErrorSlotStore, (errors) => errors.current);
+          }).pipe(
+            Effect.provide(
+              LiveCodeStore.layer.pipe(
+                Layer.provideMerge(ErrorSlotStore.layer),
+                Layer.provideMerge(Layer.merge(editor.layer, StrudelLive)),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+
+    expect(slot).toEqual({ message: "nope is not defined", phase: "playback", part: "viz" });
   },
 );

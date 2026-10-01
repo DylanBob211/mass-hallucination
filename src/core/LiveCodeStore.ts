@@ -39,11 +39,11 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
     readonly changes: Stream.Stream<LiveCode>;
     /**
      * Evaluates the Source composed for `scope` and, on success, makes the in-Scope Parts' current
-     * text their Live code and clears the error slot. On failure the previous Live code keeps
-     * playing and the error slot names the Part that failed, when it can be found. Given the texts
-     * an agent `written`, keyed as in `dryRun`, it does nothing unless every one is still its
-     * Part's text: once the human has edited, undone or deleted one, the Part is theirs again.
-     * Succeeds with whether it evaluated.
+     * text their Live code and clears the error that was in the slot before it. On failure the
+     * previous Live code keeps playing and the error slot names the Part that failed, when it can
+     * be found. Given the texts an agent `written`, keyed as in `dryRun`, it does nothing unless
+     * every one is still its Part's text: once the human has edited, undone or deleted one, the
+     * Part is theirs again. Succeeds with whether it evaluated.
      */
     readonly apply: (
       scope: Scope,
@@ -87,6 +87,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
             if (!holds(performance, written)) return false;
             const live = yield* SubscriptionRef.get(ref);
             const composition = compose(performance, live, scope);
+            const before = yield* errorSlot.current;
             yield* strudel.evaluate(composition.code).pipe(
               Effect.tapError(({ message, offset }) => {
                 const part = offset === undefined ? undefined : unitAt(composition, offset);
@@ -98,7 +99,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
               }),
             );
             yield* SubscriptionRef.set(ref, liveCodeAfter(performance, live, scope));
-            yield* errorSlot.clear;
+            yield* errorSlot.clearIfStill(before);
             return true;
           }),
         );

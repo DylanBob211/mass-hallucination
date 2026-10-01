@@ -11,7 +11,7 @@ import {
 import { applyChanges, Editor, SourceMoved, type TextChange } from "./Editor";
 import { Model, ModelError, type ModelEvent, type ModelRequest, type Tokens } from "./Model";
 import { type LongTask, Page } from "./Page";
-import { EvalError, type LateNote, Strudel } from "./Strudel";
+import { EvalError, type LateNote, type PlaybackError, Strudel } from "./Strudel";
 import type { Transport } from "./viewModel";
 
 /** An `Editor` over an in-memory Source, for Node tests (ADR 0006). */
@@ -43,7 +43,7 @@ export const makeFakeEditor = (source: string) =>
  */
 export const makeFakeStrudel = () =>
   Effect.gen(function* () {
-    const playbackErrors = yield* PubSub.unbounded<string>();
+    const playbackErrors = yield* PubSub.unbounded<PlaybackError>();
     const lateNotes = yield* PubSub.unbounded<LateNote>();
     const evaluated: string[] = [];
     const dryRuns: string[] = [];
@@ -105,8 +105,12 @@ export const makeFakeStrudel = () =>
        */
       failWith: (message: string, at?: (code: string) => number) =>
         Effect.sync(() => (failure = at === undefined ? { message } : { message, at })),
-      /** Has the playing pattern throw `message`, as Strudel's scheduler reports it. */
-      failWhilePlaying: (message: string) => PubSub.publish(playbackErrors, message),
+      /**
+       * Has the playing pattern throw `message`, as Strudel's scheduler reports it, or the Visual
+       * Part `part` throw it while drawing.
+       */
+      failWhilePlaying: (message: string, part?: string) =>
+        PubSub.publish(playbackErrors, part === undefined ? { message } : { message, part }),
       /**
        * Makes later dry-runs of code `when` accepts (all, by default) fail with `message`, at the
        * offset `at` finds when given.

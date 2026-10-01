@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Stream, SubscriptionRef, TestClock } from "effect";
+import { Effect, Fiber, Layer, Stream, SubscriptionRef, TestClock } from "effect";
 import { Agent } from "./Agent";
 import { AgentApplies } from "./AgentApplies";
 import { apply } from "./apply";
@@ -339,6 +339,29 @@ hats: s("hh*8")`;
         yield* applyScope(["kick"]);
 
         expect((yield* last)?.error).toBeUndefined();
+      }),
+    );
+
+    it.scoped("keeps an error the new code throws while its Apply is still finishing", () =>
+      Effect.gen(function* () {
+        const { applyScope, strudel, last } = yield* withSource(seed);
+        yield* strudel.failWith("Unexpected token");
+        yield* Effect.ignore(applyScope());
+        yield* strudel.succeed;
+
+        yield* strudel.holdEvaluates;
+        const applying = yield* Effect.fork(applyScope(["kick"]));
+        yield* TestClock.adjust(0);
+        yield* strudel.failWhilePlaying("nope is not defined", "viz");
+        yield* TestClock.adjust(0);
+        yield* strudel.releaseEvaluates;
+        yield* Fiber.join(applying);
+
+        expect((yield* last)?.error).toEqual({
+          message: "nope is not defined",
+          phase: "playback",
+          part: "viz",
+        });
       }),
     );
 

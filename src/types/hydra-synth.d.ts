@@ -20,20 +20,31 @@ declare module "hydra-synth" {
      * `o0`–`o3`, `render`, `update`, `afterUpdate`, `time` and the rest.
      */
     readonly synth: Record<string, unknown> & {
-      solid(r: number, g: number, b: number, a: number): { out(output: Output): void };
+      solid(r: number, g: number, b: number, a: number): Source;
       render(output?: Output): void;
       update: (dt: number) => void;
       afterUpdate: (dt: number) => void;
     };
     /** The outputs `o0`–`o3`. */
     readonly o: ReadonlyArray<Output>;
-    readonly regl: { destroy(): void };
+    readonly regl: { destroy(): void; readonly _gl: WebGLRenderingContext };
     /** Draws one frame, `dt` milliseconds after the last. */
     tick(dt: number): void;
     /** Resizes the canvas and every output's framebuffers. */
     setResolution(width: number, height: number): void;
   }
   export interface Output {
+    /** `o0`–`o3`. */
     readonly label: string;
+    /** Draws the output's shader into its framebuffer; `Hydra.tick` calls it on every output. */
+    tick(props: object): void;
+  }
+  /** What a source such as `osc()` or `solid()` gives, and each transform chained on it. */
+  export interface Source {
+    /** Each call in the chain, with the arguments it was given: numbers, functions or sources. */
+    readonly transforms: ReadonlyArray<{ readonly userArgs: Array<unknown> }>;
+    readonly defaultOutput: Output;
+    /** Compiles the chain into `output`'s shader (`o0` by default); swallows compile errors. */
+    out: (this: Source, output?: Output) => void;
   }
 }

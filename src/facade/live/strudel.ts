@@ -1,6 +1,6 @@
 import type { Repl } from "@strudel/web";
 import { Effect, Layer, Stream } from "effect";
-import { EvalError, type LateNote, Strudel } from "../../core/Strudel";
+import { EvalError, type LateNote, type PlaybackError, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
 import { createVisuals, type Visuals, VisualError } from "./visuals";
@@ -61,11 +61,12 @@ const watchSkippedTicks = (
 /**
  * Loads `@strudel/web` from the bundle and builds its repl. Browsers keep audio suspended until
  * the page has had a user gesture, so this runs only after one. Each late note goes to `onLate`
- * until `unwatch` is called.
+ * until `unwatch` is called, and each Visual Part's playback error to `onVisualError`.
  */
 const boot = async (
   onEvalError: (error: unknown) => void,
   onLate: (note: LateNote) => void,
+  onVisualError: (error: PlaybackError) => void,
 ): Promise<{ readonly repl: Repl; readonly visuals: Visuals; readonly unwatch: () => void }> => {
   const strudel = await import("@strudel/web");
   const currentTime = () => strudel.getAudioContext().currentTime;
@@ -77,7 +78,7 @@ const boot = async (
     // The repl takes this in place of its own output (`webaudioRepl`, research for ticket 12).
     defaultOutput: lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
   });
-  const visuals = await createVisuals(strudel.silence);
+  const visuals = await createVisuals(strudel.silence, onVisualError);
   await strudel.evalScope({ hydra: visuals.hydra });
   // initStrudel defers audio setup (worklets included) to the first mousedown. The performer's
   // first gesture is usually a key, so send it the one it waits for.
@@ -99,6 +100,7 @@ export const StrudelLive = Layer.scoped(
     let visuals: Visuals | undefined;
     let unwatch: (() => void) | undefined;
     const lateListeners = new Set<(note: LateNote) => void>();
+    const visualErrorListeners = new Set<(error: PlaybackError) => void>();
     // The error Strudel reported during the evaluate in flight; evaluates run one at a time.
     let reported: { error: unknown } | undefined;
     const takeReported = () => {
@@ -111,6 +113,9 @@ export const StrudelLive = Layer.scoped(
         (error) => (reported = { error }),
         (note) => {
           for (const listener of lateListeners) listener(note);
+        },
+        (error) => {
+          for (const listener of visualErrorListeners) listener(error);
         },
       ).then((booted) => {
         ({ repl, visuals, unwatch } = booted);
@@ -185,25 +190,29 @@ export const StrudelLive = Layer.scoped(
           : initialViewModel.transport,
       ),
       position: Effect.sync(() => repl?.scheduler.now() ?? 0),
-      playbackErrors,
-      lateNotes: Stream.asyncPush<LateNote>((emit) =>
-        Effect.acquireRelease(
-          Effect.sync(() => {
-            const listener = (note: LateNote) => void emit.single(note);
-            lateListeners.add(listener);
-            return listener;
-          }),
-          (listener) => Effect.sync(() => lateListeners.delete(listener)),
-        ),
-      ),
+      playbackErrors: Stream.merge(audioPlaybackErrors, streamFrom(visualErrorListeners)),
+      lateNotes: streamFrom(lateListeners),
     };
   }),
 );
 
+/** What is sent to `listeners`, from when the stream runs. */
+const streamFrom = <A>(listeners: Set<(a: A) => void>) =>
+  Stream.asyncPush<A>((emit) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const listener = (a: A) => void emit.single(a);
+        listeners.add(listener);
+        return listener;
+      }),
+      (listener) => Effect.sync(() => listeners.delete(listener)),
+    ),
+  );
+
 /** Strudel's logger announces each line as this DOM event, a playback error included (spec §8). */
 const logEvent = "strudel.log";
 
-const playbackErrors = Stream.asyncPush<string>((emit) =>
+const audioPlaybackErrors = Stream.asyncPush<PlaybackError>((emit) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const listener = (event: Event) => {
@@ -212,7 +221,7 @@ const playbackErrors = Stream.asyncPush<string>((emit) =>
           typeof detail === "object" && detail !== null && "message" in detail
             ? playbackErrorOf(String(detail.message))
             : undefined;
-        if (message !== undefined) emit.single(message);
+        if (message !== undefined) emit.single({ message });
       };
       document.addEventListener(logEvent, listener);
       return listener;

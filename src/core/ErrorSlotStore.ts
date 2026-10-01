@@ -4,7 +4,8 @@ import type { ErrorSlot } from "./viewModel";
 
 /**
  * The Performance's one error slot (spec §4): a newer error replaces it, a successful Apply clears
- * it. Apply reports evaluate errors; playback errors arrive from Strudel on their own.
+ * the one it found there. Apply reports evaluate errors; playback errors arrive from Strudel on
+ * their own, a Visual Part's possibly while the Apply that started it is still finishing.
  */
 export class ErrorSlotStore extends Context.Tag("ErrorSlotStore")<
   ErrorSlotStore,
@@ -14,7 +15,8 @@ export class ErrorSlotStore extends Context.Tag("ErrorSlotStore")<
     /** The slot now, then after every change. */
     readonly changes: Stream.Stream<ErrorSlot | undefined>;
     readonly report: (error: ErrorSlot) => Effect.Effect<void>;
-    readonly clear: Effect.Effect<void>;
+    /** Empties the slot if it still holds `error`; an error reported since stays. */
+    readonly clearIfStill: (error: ErrorSlot | undefined) => Effect.Effect<void>;
   }
 >() {
   static readonly layer = Layer.scoped(
@@ -25,8 +27,8 @@ export class ErrorSlotStore extends Context.Tag("ErrorSlotStore")<
       const report = (error: ErrorSlot) => SubscriptionRef.set(ref, Object.freeze({ ...error }));
 
       yield* Effect.forkScoped(
-        Stream.runForEach(strudel.playbackErrors, (message) =>
-          report({ message, phase: "playback" }),
+        Stream.runForEach(strudel.playbackErrors, (error) =>
+          report({ ...error, phase: "playback" }),
         ),
       );
 
@@ -34,7 +36,8 @@ export class ErrorSlotStore extends Context.Tag("ErrorSlotStore")<
         current: SubscriptionRef.get(ref),
         changes: ref.changes,
         report,
-        clear: SubscriptionRef.set(ref, undefined),
+        clearIfStill: (error) =>
+          SubscriptionRef.update(ref, (now) => (now === error ? undefined : now)),
       };
     }),
   );

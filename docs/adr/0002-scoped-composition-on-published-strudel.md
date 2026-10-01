@@ -70,10 +70,15 @@ discipline. No git dependency, no vendoring, no carried patches.
 - **Every Apply re-runs every Visual Part's Live code**, because composition includes every Part.
   Hydra keeps drawing outputs that nothing writes any more, so the host resets all four outputs
   (`solid(0,0,0,0)`), `render(o0)` and `update`/`afterUpdate` synchronously before every evaluate.
-  No output is tracked per Part. Tested in 14: no black frame, feedback framebuffers survive. The
+  The reset tracks no output per Part. Tested in 14: no black frame, feedback framebuffers survive. The
   cost is a shader recompile of every Visual Part on every Apply, a first-frame stall (about 28 ms
   on a software renderer) that the latency budget must measure on a real GPU.
 - **Removing a Visual Part** behaves like removing an Audio Part: it keeps showing until an Apply
   of every Part.
 - **Muted Visual Parts** are skipped by the host, because Strudel's `.p` mute runs only after the
   template has drawn.
+- **Playback errors are attributed by wrapping, at run time** (ticket 15): while a Part's body runs,
+  the host's `out` wraps each parameter function in its chain (nested sources included) and
+  remembers which Part last wrote each output; each output's `tick` is wrapped to read
+  `gl.getError()` after it draws. These replace methods on Hydra's objects at run time, not
+  Hydra's source, so there are still zero patches to the package.
