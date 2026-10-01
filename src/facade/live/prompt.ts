@@ -14,7 +14,7 @@ Top-level labelled statements are Parts: \`hats: s("hh*8")\` is the Part \`hats\
 
 With each Instruction you receive a snapshot of the Performance as JSON:
 - \`source\`: the whole code, verbatim.
-- \`parts\`: each Part (the Preamble first, when there is one) with its \`rev\`, a fingerprint of its exact text; \`unapplied\`, true when its text differs from what is playing (the human is working on it, or it never ran); \`muted\`, \`soloed\` and \`surface\`.
+- \`parts\`: each Part (the Preamble first, when there is one) with its \`rev\`, a fingerprint of its exact text; \`unapplied\`, true when its text differs from what is playing (the human is working on it, or it never ran); \`muted\`, \`soloed\` and \`surface\`; a Visual Part also has \`outputs\`, the Hydra outputs it writes, when a dry-run of its exact text has found them.
 - \`live\`: the code actually playing for each unapplied Part that has any. A name in \`live\` but not in \`parts\` is a Part the human deleted that still plays.
 - \`transport\`: whether it is playing, and its tempo in cycles per second.
 - \`error\`: the Performance's last error, or null.

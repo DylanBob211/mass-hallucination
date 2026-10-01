@@ -5,7 +5,7 @@ import { AutonomyStore } from "./AutonomyStore";
 import { Editor } from "./Editor";
 import { ErrorSlotStore } from "./ErrorSlotStore";
 import { deleted, isUnapplied, type LiveCode } from "./liveCode";
-import { LiveCodeStore } from "./LiveCodeStore";
+import { LiveCodeStore, outputsOf, type VisualOutputs } from "./LiveCodeStore";
 import { type Part, type Performance, parsePerformance } from "./Performance";
 import { type Proposal, ProposalStore } from "./ProposalStore";
 import { Strudel } from "./Strudel";
@@ -43,6 +43,7 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
         initialViewModel,
         parsePerformance(yield* editor.read),
         yield* liveCode.current,
+        yield* liveCode.outputs,
       );
       const ref = yield* SubscriptionRef.make(initial);
       // Transport and the Source change the view model from separate fibers.
@@ -67,12 +68,15 @@ export class ViewModelStore extends Context.Tag("ViewModelStore")<
         Effect.repeat(readTransport, Schedule.spaced(transportPollInterval)),
       );
 
-      // Whether a Part is Unapplied changes with the Source and with the Live code.
+      // Whether a Part is Unapplied changes with the Source and with the Live code; its outputs,
+      // with the Source and each dry-run.
       yield* Effect.forkScoped(
-        Stream.runForEach(Stream.zipLatest(editor.changes, liveCode.changes), ([source, live]) =>
-          publish((current) =>
-            Effect.sync(() => withParts(current, parsePerformance(source), live)),
-          ),
+        Stream.runForEach(
+          Stream.zipLatestAll(editor.changes, liveCode.changes, liveCode.outputChanges),
+          ([source, live, outputs]) =>
+            publish((current) =>
+              Effect.sync(() => withParts(current, parsePerformance(source), live, outputs)),
+            ),
         ),
       );
 
@@ -132,8 +136,13 @@ const withTransport = (current: ViewModel, transport: Transport, position: numbe
 };
 
 /** The Parts' views, reusing each one whose view is unchanged, and the list if every one is. */
-const withParts = (current: ViewModel, performance: Performance, live: LiveCode): ViewModel => {
-  const views = partViews(performance, live).map((view) => {
+const withParts = (
+  current: ViewModel,
+  performance: Performance,
+  live: LiveCode,
+  outputs: VisualOutputs,
+): ViewModel => {
+  const views = partViews(performance, live, outputs).map((view) => {
     const previous = current.parts.find(({ id }) => id === view.id);
     return previous !== undefined && sameView(previous, view) ? previous : Object.freeze(view);
   });
@@ -145,25 +154,34 @@ const withParts = (current: ViewModel, performance: Performance, live: LiveCode)
 };
 
 /** The Source's Parts, then each deleted Part as its Live code reads. */
-const partViews = (performance: Performance, live: LiveCode): Array<PartView> => [
-  ...performance.parts.map((part) => viewOf(part, isUnapplied(part, live))),
+const partViews = (
+  performance: Performance,
+  live: LiveCode,
+  outputs: VisualOutputs,
+): Array<PartView> => [
+  ...performance.parts.map((part) => viewOf(part, isUnapplied(part, live), outputs)),
   ...deleted(performance, live).flatMap(([id, text]) =>
     parsePerformance(text).parts.map((part) => ({
-      ...viewOf({ ...part, id }, true),
+      ...viewOf({ ...part, id }, true, outputs),
       deleted: true,
       live: text,
     })),
   ),
 ];
 
-const viewOf = ({ id, muted, soloed, surface }: Part, unapplied: boolean): PartView => ({
-  id,
-  muted,
-  soloed,
-  surface,
-  unapplied,
-  deleted: false,
-});
+const viewOf = (part: Part, unapplied: boolean, outputs: VisualOutputs): PartView => {
+  const { id, muted, soloed, surface } = part;
+  const written = outputsOf(part, outputs);
+  return {
+    id,
+    muted,
+    soloed,
+    surface,
+    unapplied,
+    deleted: false,
+    ...(written !== undefined && { outputs: Object.freeze([...written]) }),
+  };
+};
 
 const sameView = (a: PartView, b: PartView) =>
   a.muted === b.muted &&
@@ -171,4 +189,5 @@ const sameView = (a: PartView, b: PartView) =>
   a.surface === b.surface &&
   a.unapplied === b.unapplied &&
   a.deleted === b.deleted &&
-  a.live === b.live;
+  a.live === b.live &&
+  a.outputs?.join() === b.outputs?.join();

@@ -7,6 +7,7 @@ import { composeWith, preambleId, writeTexts } from "./liveCode";
 import { type DryRun, LiveCodeStore } from "./LiveCodeStore";
 import { parsePerformance } from "./Performance";
 import { ProposalStore } from "./ProposalStore";
+import type { VisualErrorKind } from "./Strudel";
 
 /**
  * The agent's one tool's input (spec §6.2): each Part's whole new text, and the rev of the text it
@@ -41,8 +42,8 @@ export type ChangePartsResult =
       readonly reason: "invalid";
       readonly message: string;
       readonly part?: string;
-      /** For a Visual Part (ticket 16). */
-      readonly kind?: "syntax" | "name" | "argument" | "shader" | "parameter";
+      /** For a Visual Part. */
+      readonly kind?: VisualErrorKind;
     }
   | { readonly ok: false; readonly reason: "bad_request"; readonly message: string };
 
@@ -84,12 +85,13 @@ export const changeParts = (
       if (checked?.code !== composeWith(performance, live, scope, texts).code) {
         const dryRun = yield* Effect.either(liveCode.dryRun(scope, texts));
         if (Either.isLeft(dryRun)) {
-          const { message, part } = dryRun.left;
+          const { message, part, kind } = dryRun.left;
           return {
             ok: false,
             reason: "invalid",
             message,
             ...(part !== undefined && { part }),
+            ...(kind !== undefined && { kind }),
           } satisfies ChangePartsResult;
         }
         checked = dryRun.right;

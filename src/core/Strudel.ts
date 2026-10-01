@@ -1,19 +1,36 @@
 import { Context, Data, type Effect, type Stream } from "effect";
-import type { Transport } from "./viewModel";
+import type { Transport, VisualOutput } from "./viewModel";
 
 /**
  * Evaluating code failed; whatever was playing keeps playing. `offset` is where in that code it
- * failed, when Strudel tells.
+ * failed, when Strudel tells. A dry-run that refuses a Visual Part tells what `kind` of error it is.
  */
 export class EvalError extends Data.TaggedError("EvalError")<{
   readonly message: string;
   readonly offset?: number;
+  readonly kind?: VisualErrorKind;
 }> {}
+
+/**
+ * What a Visual Part's dry-run refused (ADR 0004 visual amendment): code that does not parse, or
+ * Hydra code in any shape but a Visual Part; a name nothing defines; an argument Hydra cannot
+ * take; a shader that does not compile; a parameter function that fails when probed.
+ */
+export type VisualErrorKind = "syntax" | "name" | "argument" | "shader" | "parameter";
 
 /** Something a dry-run found that is not an error, and where in the code it is. */
 export interface DryRunWarning {
   readonly message: string;
   readonly offset?: number;
+}
+
+/**
+ * What a dry-run that passed found: its warnings, and the outputs each Visual Part it ran writes,
+ * by Part identity.
+ */
+export interface DryRunReport {
+  readonly warnings: ReadonlyArray<DryRunWarning>;
+  readonly outputs: ReadonlyMap<string, ReadonlyArray<VisualOutput>>;
 }
 
 /**
@@ -41,10 +58,11 @@ export class Strudel extends Context.Tag("Strudel")<
     readonly evaluate: (code: string) => Effect.Effect<void, EvalError>;
     /**
      * Evaluates `code` as `evaluate` would, and queries what it makes, without touching what plays
-     * (spec §6.3). Fails as `evaluate` would fail, and also when the query fails or runs too long
-     * or the code calls `hush()`. Runs one at a time with `evaluate`.
+     * (spec §6.3), then runs each Visual Part on a Hydra of its own. Fails as `evaluate` would
+     * fail, and also when the query fails or runs too long, the code calls `hush()`, or a Visual
+     * Part fails its checks. Runs one at a time with `evaluate`.
      */
-    readonly dryRun: (code: string) => Effect.Effect<ReadonlyArray<DryRunWarning>, EvalError>;
+    readonly dryRun: (code: string) => Effect.Effect<DryRunReport, EvalError>;
     /** Stops the transport; the cycle count returns to 0. */
     readonly stop: Effect.Effect<void>;
     readonly transport: Effect.Effect<Transport>;

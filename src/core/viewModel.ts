@@ -113,6 +113,8 @@ export interface PartView extends Pick<Part, "id" | "muted" | "soloed" | "surfac
   readonly deleted: boolean;
   /** A deleted Part's Live code: the text still sounding, shown as its ghost (ADR 0007). */
   readonly live?: string;
+  /** A Visual Part's outputs, as the last dry-run of its exact text found them. */
+  readonly outputs?: ReadonlyArray<VisualOutput>;
 }
 
 /**
@@ -125,6 +127,9 @@ export interface ErrorSlot {
   readonly phase: "eval" | "playback";
   readonly part?: string;
 }
+
+/** One of Hydra's four outputs, which a Visual Part writes with `.out()`. */
+export type VisualOutput = "o0" | "o1" | "o2" | "o3";
 
 /** Whether the Performance is running, and at what tempo (CONTEXT.md). */
 export interface Transport {

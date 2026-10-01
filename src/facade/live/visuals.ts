@@ -1,7 +1,7 @@
 import { parse } from "acorn";
 import type { Output, Source } from "hydra-synth";
 import { hydraTemplateOf, parseOptions, readLabel } from "../../core/Performance";
-import type { PlaybackError } from "../../core/Strudel";
+import type { PlaybackError, VisualErrorKind } from "../../core/Strudel";
 
 /**
  * The host's Hydra glue in place of `@strudel/hydra` (spec §8, ADR 0002 amendment): one live
@@ -28,11 +28,12 @@ export interface Visuals {
   readonly dispose: () => void;
 }
 
-/** An error in a Visual Part's body, at `offset` in the code being evaluated. */
+/** An error in a Visual Part's body, at `offset` in the code being evaluated, and its kind. */
 export class VisualError extends Error {
   constructor(
     message: string,
     readonly offset: number,
+    readonly kind: VisualErrorKind,
   ) {
     super(message);
     this.name = "VisualError";
@@ -42,16 +43,26 @@ export class VisualError extends Error {
 /** A function a Visual Part gives Hydra to call on every frame. */
 type PerFrame = (...args: Array<unknown>) => unknown;
 
+/** Why a `hydra` template with `${…}` is refused, at evaluate and in a dry-run alike. */
+export const interpolationMessage =
+  "a hydra template takes no ${…}: only Hydra's names are in scope";
+
 /** A Visual Part in the code being evaluated. */
-interface VisualPart {
+export interface VisualPart {
   /** Its label as written, marks included, as the transpiler passes it to `.p`. */
   readonly label: string;
   /** Its identity, which a playback error names. */
   readonly id: string;
+  /** Its body, as written, up to the first `${` if it has one. */
+  readonly body: string;
   /** Where its body starts in the code. */
   readonly bodyStart: number;
   /** Where the body's first `${` is, if it has one. */
   readonly firstInterpolationAt: number;
+  /** Its template has a `${…}`, which the tag refuses. */
+  readonly interpolated: boolean;
+  /** Where its `hydra` tag is in the code. */
+  readonly tagStart: number;
   /** Muted, or soloed out within the Visual Surface: its body does not run. */
   readonly skipped: boolean;
 }
@@ -181,13 +192,10 @@ export const createVisuals = async (
         parts.splice(index, 1);
         if (part.skipped) return silence;
         if (values.length > 0)
-          throw new VisualError(
-            "a hydra template takes no ${…}: only Hydra's names are in scope",
-            part.firstInterpolationAt,
-          );
+          throw new VisualError(interpolationMessage, part.firstInterpolationAt, "syntax");
         running = part.id;
         try {
-          run(strings.raw[0] ?? "", part.bodyStart, scope);
+          runBody(strings.raw[0] ?? "", part.bodyStart, scope);
         } finally {
           running = undefined;
         }
@@ -220,7 +228,7 @@ export const createVisuals = async (
  * is Preamble, so its body never runs. Code that does not parse has none; its evaluation fails
  * before any body could run.
  */
-const visualPartsIn = (code: string): Array<VisualPart> => {
+export const visualPartsIn = (code: string): Array<VisualPart> => {
   let program;
   try {
     program = parse(code, parseOptions);
@@ -233,38 +241,59 @@ const visualPartsIn = (code: string): Array<VisualPart> => {
     const marks = readLabel(statement.label.name);
     if (marks === undefined || taken.has(marks.id)) return [];
     taken.add(marks.id);
-    const [first] = hydraTemplateOf(statement)?.quasi.quasis ?? [];
-    if (first === undefined) return [];
+    const template = hydraTemplateOf(statement);
+    const [first] = template?.quasi.quasis ?? [];
+    if (template === undefined || first === undefined) return [];
     const { name: label } = statement.label;
-    return [{ label, bodyStart: first.start, firstInterpolationAt: first.end, ...marks }];
+    return [
+      {
+        label,
+        body: first.value.raw,
+        bodyStart: first.start,
+        firstInterpolationAt: first.end,
+        interpolated: template.quasi.expressions.length > 0,
+        tagStart: template.tag.start,
+        ...marks,
+      },
+    ];
   });
   const soloing = parts.some((part) => part.soloed);
-  return parts.map(({ label, id, bodyStart, firstInterpolationAt, muted, soloed }) => ({
-    label,
-    id,
-    bodyStart,
-    firstInterpolationAt,
+  return parts.map(({ muted, soloed, ...part }) => ({
+    ...part,
     skipped: muted || (soloing && !soloed),
   }));
 };
 
 /** Runs a Visual Part's `body`, which starts at `from` in the code, with only `scope`'s names. */
-const run = (body: string, from: number, scope: object) => {
+export const runBody = (body: string, from: number, scope: object) => {
   try {
     parse(body, { ecmaVersion: 2022, allowReturnOutsideFunction: true });
   } catch (error) {
     const message = error instanceof Error ? error.message.replace(/ \(\d+:\d+\)$/, "") : "";
     const pos = error instanceof SyntaxError && "pos" in error ? Number(error.pos) : 0;
-    throw new VisualError(message, from + pos);
+    throw new VisualError(message, from + pos, "syntax");
   }
   try {
     // Sloppy mode, as Strudel's own eval is, for `with`.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     (Function("scope", `with (scope) {${body}\n}`) as (scope: object) => void)(scope);
   } catch (error) {
-    throw new VisualError(error instanceof Error ? error.message : String(error), from);
+    if (error instanceof VisualError) throw error;
+    throw new VisualError(
+      error instanceof Error ? error.message : String(error),
+      from,
+      isNameError(error) ? "name" : "argument",
+    );
   }
 };
+
+/**
+ * A name nothing defines, read or called: `osk(10)`, `osc().nope()`. Anything else a body throws
+ * is taken as a value Hydra, or the body itself, cannot use.
+ */
+const isNameError = (error: unknown) =>
+  error instanceof ReferenceError ||
+  (error instanceof TypeError && error.message.endsWith("is not a function"));
 
 /** Replaces each function in `source`'s chain, and in the sources it is given, by `wrap`'s. */
 const blameFunctionsIn = (source: Source, wrap: (fn: PerFrame) => PerFrame) => {
@@ -275,7 +304,8 @@ const blameFunctionsIn = (source: Source, wrap: (fn: PerFrame) => PerFrame) => {
     });
 };
 
-const isSource = (value: unknown): value is Source =>
+/** A Hydra source such as `osc()`, with the chain called on it. */
+export const isSource = (value: unknown): value is Source =>
   typeof value === "object" && value !== null && "transforms" in value;
 
 /** The WebGL constant's name for an error `code`. */
@@ -297,7 +327,7 @@ const glErrorName = (gl: WebGLRenderingContext, code: number) =>
  * name the body assigns without declaring it is kept here, not on `globalThis`, so nothing leaks.
  * What it assigns to one of Hydra's names goes through `assigning` first.
  */
-const hydraScope = (
+export const hydraScope = (
   synth: Record<string, unknown>,
   assigning: (name: string, value: unknown) => unknown,
 ): object => {

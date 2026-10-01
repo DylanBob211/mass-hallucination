@@ -12,16 +12,19 @@ import {
   type Scope,
   unitAt,
 } from "./liveCode";
-import { parsePerformance } from "./Performance";
-import { type EvalError, Strudel } from "./Strudel";
+import { type Part, parsePerformance } from "./Performance";
+import { type EvalError, Strudel, type VisualErrorKind } from "./Strudel";
+import type { VisualOutput } from "./viewModel";
 
 /**
  * A dry-run refused the change (spec §6.3): the composition would not evaluate, or not query
- * cleanly. `part` is where the error is, by Part identity or `preambleId`, when it can be found.
+ * cleanly. `part` is where the error is, by Part identity or `preambleId`, when it can be found;
+ * `kind` is what kind of error it is, for a Visual Part.
  */
 export class Invalid extends Data.TaggedError("Invalid")<{
   readonly message: string;
   readonly part?: string;
+  readonly kind?: VisualErrorKind;
 }> {}
 
 /** A dry-run that passed: the composition it evaluated, and what it warned of. */
@@ -29,6 +32,16 @@ export interface DryRun {
   readonly code: string;
   readonly warnings: ReadonlyArray<string>;
 }
+
+/**
+ * The outputs each Visual Part writes, by the Part's exact text, as dry-runs found them. A Visual
+ * Part's body sees only Hydra's names, so its outputs follow from its text alone.
+ */
+export type VisualOutputs = ReadonlyMap<string, ReadonlyArray<VisualOutput>>;
+
+/** A Part's outputs, when it is a Visual Part whose exact text a dry-run has passed. */
+export const outputsOf = (part: Part, outputs: VisualOutputs) =>
+  part.surface === "visual" ? outputs.get(part.text) : undefined;
 
 /** The Live code, and Apply: the one way it changes (spec §5). */
 export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
@@ -60,14 +73,19 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
     /**
      * Dry-runs the composition an Apply of `scope` would evaluate once `texts` are written, each
      * keyed by a Part's identity or `preambleId` (a key the Source lacks is a new Part, at the
-     * end). Every key is in Scope, whether `scope` names it or not. Changes nothing; waits for an
-     * Apply in progress. Succeeds with the code it evaluated and its warnings, each prefixed with
-     * the Part it is in when it can be found.
+     * end). Every key is in Scope, whether `scope` names it or not. Changes no Live code; waits for
+     * an Apply in progress. Succeeds with the code it evaluated and its warnings, each prefixed
+     * with the Part it is in when it can be found, and remembers the outputs of each Visual Part
+     * it ran.
      */
     readonly dryRun: (
       scope: Scope,
       texts: ReadonlyMap<string, string>,
     ) => Effect.Effect<DryRun, Invalid>;
+    /** The outputs of every Visual Part text a dry-run has passed. */
+    readonly outputs: Effect.Effect<VisualOutputs>;
+    /** The outputs now, then after every dry-run that changed them. */
+    readonly outputChanges: Stream.Stream<VisualOutputs>;
   }
 >() {
   static readonly layer = Layer.effect(
@@ -77,6 +95,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
       const strudel = yield* Strudel;
       const errorSlot = yield* ErrorSlotStore;
       const ref = yield* SubscriptionRef.make(noLiveCode);
+      const outputs = yield* SubscriptionRef.make<VisualOutputs>(new Map());
       // One Apply or dry-run at a time, so each composes from the Live code the last Apply left.
       const lock = yield* Effect.makeSemaphore(1);
 
@@ -124,24 +143,36 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
             );
             const partAt = (offset: number | undefined) =>
               offset === undefined ? undefined : unitAt(composition, offset);
-            const warnings = yield* strudel
-              .dryRun(composition.code)
-              .pipe(
-                Effect.catchAll(({ message, offset }) =>
-                  Effect.flatMap(
-                    offset === undefined
-                      ? firstUnitFailing(composition, message)
-                      : Effect.succeed(partAt(offset)),
-                    (part) =>
-                      Effect.fail(
-                        new Invalid(part === undefined ? { message } : { message, part }),
-                      ),
-                  ),
+            const report = yield* strudel.dryRun(composition.code).pipe(
+              Effect.catchAll(({ message, offset, kind }) =>
+                Effect.flatMap(
+                  offset === undefined
+                    ? firstUnitFailing(composition, message)
+                    : Effect.succeed(partAt(offset)),
+                  (part) =>
+                    Effect.fail(
+                      new Invalid({
+                        message,
+                        ...(part !== undefined && { part }),
+                        ...(kind !== undefined && { kind }),
+                      }),
+                    ),
                 ),
-              );
+              ),
+            );
+            if (report.outputs.size > 0)
+              yield* SubscriptionRef.update(outputs, (known) => {
+                const next = new Map(known);
+                for (const [id, written] of report.outputs) {
+                  const unit = composition.units.find((u) => u.id === id);
+                  if (unit !== undefined)
+                    next.set(composition.code.slice(unit.from, unit.to), written);
+                }
+                return next;
+              });
             return {
               code: composition.code,
-              warnings: warnings.map(({ message, offset }) => {
+              warnings: report.warnings.map(({ message, offset }) => {
                 const part = partAt(offset);
                 return part === undefined ? message : `${part}: ${message}`;
               }),
@@ -170,6 +201,8 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
         apply,
         setLiveCode,
         dryRun,
+        outputs: SubscriptionRef.get(outputs),
+        outputChanges: outputs.changes,
       };
     }),
   );

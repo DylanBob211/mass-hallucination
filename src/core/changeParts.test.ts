@@ -249,6 +249,30 @@ describe("change_parts", () => {
         expect(strudel.evaluated).toHaveLength(1);
       }),
     );
+
+    it.scoped("a Visual Part the dry-run rejects, as invalid with what kind of error it is", () =>
+      Effect.gen(function* () {
+        const { strudel, turn } = yield* setup("write", [
+          change("viz", null, "viz: hydra`osc(10).nope().out()`"),
+        ]);
+        yield* strudel.failDryRunWith("osc(...).nope is not a function", {
+          at: (code) => code.indexOf("osc"),
+          kind: "name",
+        });
+
+        const results = yield* turn;
+
+        expect(results).toEqual([
+          {
+            ok: false,
+            reason: "invalid",
+            message: "osc(...).nope is not a function",
+            part: "viz",
+            kind: "name",
+          },
+        ]);
+      }),
+    );
   });
 
   it.scoped("refuses a Part holding the human's Unapplied edits, naming only the Part", () =>

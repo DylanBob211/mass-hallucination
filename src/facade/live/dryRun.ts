@@ -171,7 +171,8 @@ const isChainLink = (node: AnyNode) =>
   node.type === "MemberExpression" ||
   (node.type === "CallExpression" && node.callee.type === "MemberExpression");
 
-const childrenOf = (node: AnyNode): Array<AnyNode> =>
+/** The nodes directly under `node`, in the order acorn keeps them. */
+export const childrenOf = (node: AnyNode): Array<AnyNode> =>
   (Object.values(node) as ReadonlyArray<unknown>).flatMap((value) =>
     (Array.isArray(value) ? (value as ReadonlyArray<unknown>) : [value]).filter(isNode),
   );

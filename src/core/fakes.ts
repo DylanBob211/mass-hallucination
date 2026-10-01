@@ -11,8 +11,14 @@ import {
 import { applyChanges, Editor, SourceMoved, type TextChange } from "./Editor";
 import { Model, ModelError, type ModelEvent, type ModelRequest, type Tokens } from "./Model";
 import { type LongTask, Page } from "./Page";
-import { EvalError, type LateNote, type PlaybackError, Strudel } from "./Strudel";
-import type { Transport } from "./viewModel";
+import {
+  EvalError,
+  type LateNote,
+  type PlaybackError,
+  Strudel,
+  type VisualErrorKind,
+} from "./Strudel";
+import type { Transport, VisualOutput } from "./viewModel";
 
 /** An `Editor` over an in-memory Source, for Node tests (ADR 0006). */
 export const makeFakeEditor = (source: string) =>
@@ -52,10 +58,17 @@ export const makeFakeStrudel = () =>
     let failure: Failure | undefined;
     let dryRunFailure: Failure | undefined;
     let warning: { message: string; at: (code: string) => number } | undefined;
+    let outputs: ReadonlyMap<string, ReadonlyArray<VisualOutput>> = new Map();
     let held: Deferred.Deferred<undefined> | undefined;
     let heldDryRuns: Deferred.Deferred<undefined> | undefined;
-    const fail = ({ message, at }: Failure, code: string) =>
-      Effect.fail(new EvalError(at === undefined ? { message } : { message, offset: at(code) }));
+    const fail = ({ message, at, kind }: Failure, code: string) =>
+      Effect.fail(
+        new EvalError({
+          message,
+          ...(at !== undefined && { offset: at(code) }),
+          ...(kind !== undefined && { kind }),
+        }),
+      );
 
     return {
       layer: Layer.succeed(Strudel, {
@@ -81,11 +94,13 @@ export const makeFakeStrudel = () =>
               if (dryRunFailure !== undefined && (dryRunFailure.when?.(code) ?? true))
                 return fail(dryRunFailure, code);
               dryRuns.push(code);
-              return Effect.succeed(
-                warning === undefined
-                  ? []
-                  : [{ message: warning.message, offset: warning.at(code) }],
-              );
+              return Effect.succeed({
+                warnings:
+                  warning === undefined
+                    ? []
+                    : [{ message: warning.message, offset: warning.at(code) }],
+                outputs,
+              });
             }),
           ),
         stop: Effect.sync(() => {
@@ -113,18 +128,34 @@ export const makeFakeStrudel = () =>
         PubSub.publish(playbackErrors, part === undefined ? { message } : { message, part }),
       /**
        * Makes later dry-runs of code `when` accepts (all, by default) fail with `message`, at the
-       * offset `at` finds when given.
+       * offset `at` finds when given, as a Visual Part's error of `kind` when given.
        */
       failDryRunWith: (
         message: string,
-        { at, when }: { at?: (code: string) => number; when?: (code: string) => boolean } = {},
+        {
+          at,
+          when,
+          kind,
+        }: {
+          at?: (code: string) => number;
+          when?: (code: string) => boolean;
+          kind?: VisualErrorKind;
+        } = {},
       ) =>
         Effect.sync(() => {
-          dryRunFailure = { message, ...(at && { at }), ...(when && { when }) };
+          dryRunFailure = {
+            message,
+            ...(at && { at }),
+            ...(when && { when }),
+            ...(kind && { kind }),
+          };
         }),
       /** Makes every later dry-run warn `message`, at the offset `at` finds in the code. */
       warnDryRun: (message: string, at: (code: string) => number) =>
         Effect.sync(() => (warning = { message, at })),
+      /** Makes every later dry-run report these outputs, by Visual Part identity. */
+      reportOutputs: (byPart: Readonly<Record<string, ReadonlyArray<VisualOutput>>>) =>
+        Effect.sync(() => (outputs = new Map(Object.entries(byPart)))),
       /** Has a note come `lateBy` milliseconds too late, at `at`. */
       noteLate: (at: number, lateBy: number, where: LateNote["where"] = "scheduler") =>
         PubSub.publish(lateNotes, { at, lateBy, where }),
@@ -155,6 +186,7 @@ interface Failure {
   readonly message: string;
   readonly at?: (code: string) => number;
   readonly when?: (code: string) => boolean;
+  readonly kind?: VisualErrorKind;
 }
 
 /** A reply the fake `Model` gives in place of a `change_parts` call. */

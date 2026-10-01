@@ -5,6 +5,7 @@ import { ErrorSlotStore } from "./ErrorSlotStore";
 import { makeFakeEditor, makeFakeStrudel } from "./fakes";
 import { preambleId, type Scope } from "./liveCode";
 import { LiveCodeStore } from "./LiveCodeStore";
+import { takeSnapshot } from "./snapshot";
 
 const setup = (source: string) =>
   Effect.gen(function* () {
@@ -31,7 +32,8 @@ const setup = (source: string) =>
       Effect.flatMap(ErrorSlotStore, (store) => store.current),
       context,
     );
-    return { editor, strudel, context, dryRun, liveCode, error };
+    const snapshot = Effect.provide(takeSnapshot(null), context);
+    return { editor, strudel, context, dryRun, liveCode, error, snapshot };
   });
 
 const seed = `samples('github:tidalcycles/dirt-samples')
@@ -207,6 +209,36 @@ chords: note("c3")`;
       expect(whileApplying).toEqual([]);
       // Composed after the Apply, from the Live code it left.
       expect(strudel.dryRuns).toEqual([seed.replace("hh*8", "hh*16")]);
+    }),
+  );
+
+  it.scoped("tells each Visual Part's outputs once the Source holds the text it dry-ran", () =>
+    Effect.gen(function* () {
+      const source = `${seed}\nviz: hydra\`osc().out()\``;
+      const { editor, strudel, context, dryRun, snapshot } = yield* setup(source);
+      yield* Effect.provide(apply(), context);
+      const glowing = "viz: hydra`osc().out(o1); osc().out(o2)`";
+      yield* strudel.reportOutputs({ viz: ["o1", "o2"] });
+
+      yield* dryRun(["viz"], { viz: glowing });
+      const before = yield* snapshot;
+      yield* editor.type(source.replace("viz: hydra`osc().out()`", glowing));
+      const after = yield* snapshot;
+
+      const outputsIn = ({ parts }: typeof before) =>
+        parts.map((part) => [part.part, part.outputs]);
+      expect(outputsIn(before)).toEqual([
+        [preambleId, undefined],
+        ["kick", undefined],
+        ["hats", undefined],
+        ["viz", undefined],
+      ]);
+      expect(outputsIn(after)).toEqual([
+        [preambleId, undefined],
+        ["kick", undefined],
+        ["hats", undefined],
+        ["viz", ["o1", "o2"]],
+      ]);
     }),
   );
 });

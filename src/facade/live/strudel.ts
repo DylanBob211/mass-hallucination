@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect";
 import { EvalError, type LateNote, type PlaybackError, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
+import { checkHydraShape, createVisualDryRun, type VisualDryRun } from "./visualDryRun";
 import { createVisuals, type Visuals, VisualError } from "./visuals";
 
 /**
@@ -98,6 +99,8 @@ export const StrudelLive = Layer.scoped(
     let booting: Promise<Repl> | undefined;
     let repl: Repl | undefined;
     let visuals: Visuals | undefined;
+    // The visual dry-run's own Hydra, made on the first dry-run.
+    let visualDryRun: Promise<VisualDryRun> | undefined;
     let unwatch: (() => void) | undefined;
     const lateListeners = new Set<(note: LateNote) => void>();
     const visualErrorListeners = new Set<(error: PlaybackError) => void>();
@@ -141,6 +144,9 @@ export const StrudelLive = Layer.scoped(
         repl?.stop();
         unwatch?.();
         visuals?.dispose();
+        void visualDryRun?.then((dryRun) => {
+          dryRun.dispose();
+        });
       }),
     );
 
@@ -176,11 +182,36 @@ export const StrudelLive = Layer.scoped(
           Effect.gen(function* () {
             yield* booted;
             const strudel = yield* Effect.promise(() => import("@strudel/web"));
+            yield* Effect.try({
+              try: () => {
+                checkHydraShape(code);
+              },
+              catch: (cause) => evalErrorOf(cause, code),
+            });
             yield* Effect.tryPromise({
               try: () => evaluateDry(strudel, code),
               catch: (cause) => evalErrorOf(cause, code),
             });
-            return synonymsSetTwice(code, sameControlIn(strudel));
+            const visual = yield* Effect.tryPromise({
+              try: () =>
+                (visualDryRun ??= createVisualDryRun().catch((cause: unknown) => {
+                  // The next dry-run tries again.
+                  visualDryRun = undefined;
+                  throw cause;
+                })),
+              catch: (cause) =>
+                new EvalError({
+                  message: `Hydra failed to load for the dry-run: ${String(cause)}`,
+                }),
+            });
+            const { warnings, outputs } = yield* Effect.try({
+              try: () => visual.check(code),
+              catch: (cause) => evalErrorOf(cause, code),
+            });
+            return {
+              warnings: [...synonymsSetTwice(code, sameControlIn(strudel)), ...warnings],
+              outputs,
+            };
           }),
         ),
       stop: Effect.sync(() => repl?.stop()),
@@ -250,7 +281,8 @@ export const playbackErrorOf = (line: string): string | undefined =>
  */
 export const evalErrorOf = (error: unknown, code: string): EvalError => {
   const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof VisualError) return new EvalError({ message, offset: error.offset });
+  if (error instanceof VisualError)
+    return new EvalError({ message, offset: error.offset, kind: error.kind });
   if (error instanceof SyntaxError && "pos" in error && typeof error.pos === "number")
     return new EvalError({ message: message.replace(/ \(\d+:\d+\)$/, ""), offset: error.pos });
   const mini = /^\[mini\] parse error at line (\d+): (.*)$/s.exec(message);

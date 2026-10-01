@@ -58,7 +58,11 @@ const withSource = (
       Effect.ensuring(Effect.provide(apply(scope), context), TestClock.adjust(0));
     /** Runs `effect` against the store's services, and lets the store see what it leaves. */
     const run = <A, E>(
-      effect: Effect.Effect<A, E, AutonomyStore | AgentApplies | ProposalStore | Agent>,
+      effect: Effect.Effect<
+        A,
+        E,
+        AutonomyStore | AgentApplies | ProposalStore | Agent | LiveCodeStore
+      >,
     ) => Effect.ensuring(Effect.provide(effect, context), TestClock.adjust(0));
     return { edit, applyScope, run, strudel, seen, last, tick, source: editor.read };
   });
@@ -231,6 +235,25 @@ Sviz: hydra\`osc().out()\``;
         });
         expect(after?.parts[0]).toBe(before?.parts[0]);
         expect(after?.parts[2]).toBe(before?.parts[2]);
+      }),
+    );
+
+    it.scoped("shows a Visual Part's outputs once a dry-run of its text has found them", () =>
+      Effect.gen(function* () {
+        const { strudel, run, last } = yield* withSource(seed);
+        yield* strudel.reportOutputs({ viz: ["o0"] });
+
+        yield* run(
+          Effect.flatMap(LiveCodeStore, (store) =>
+            store.dryRun(["viz"], new Map([["viz", "Sviz: hydra`osc().out()`"]])),
+          ),
+        );
+
+        expect((yield* last)?.parts.map((p) => [p.id, p.outputs])).toEqual([
+          ["kick", undefined],
+          ["hats", undefined],
+          ["viz", ["o0"]],
+        ]);
       }),
     );
 
