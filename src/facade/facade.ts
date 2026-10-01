@@ -82,7 +82,8 @@ export interface Facade {
   stop(): Promise<void>;
   /**
    * Hands the performer this session's instrumentation log as a JSON file (spec §11): each
-   * Turn's timings, calls and tokens, and every long task and late note.
+   * Turn's timings, calls and tokens, every long task and late note, the frame times after each
+   * Apply, and the onset-to-flash estimates.
    */
   downloadLog(): Promise<void>;
   dispose(): Promise<void>;

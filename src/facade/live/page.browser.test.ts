@@ -27,3 +27,25 @@ test("a task that blocks the main thread over 50 ms shows as a long task, when i
   expect(task).toBeDefined();
   expect(Math.abs((task?.at ?? 0) - blockedAt)).toBeLessThan(50);
 });
+
+test("frames from a moment show the gap a stall then left, and the frames after it", async () => {
+  const { from, frames } = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const page = yield* Page;
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 200)));
+        const from = yield* Clock.currentTimeMillis;
+        const end = performance.now() + 120;
+        while (performance.now() < end);
+        return { from, frames: yield* page.frames(from, from + 500) };
+      }).pipe(Effect.provide(PageLive)),
+    ),
+  );
+
+  expect(frames[0]).toBeLessThanOrEqual(from);
+  expect(frames.at(-1)).toBeLessThanOrEqual(from + 500);
+  const gaps = frames.slice(1).map((time, i) => time - (frames[i] ?? time));
+  expect(gaps[0]).toBeGreaterThanOrEqual(120);
+  expect(gaps.length).toBeGreaterThan(5);
+  for (const gap of gaps.slice(1)) expect(gap).toBeLessThan(120);
+});

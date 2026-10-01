@@ -44,6 +44,20 @@ export interface LateNote {
   readonly where: "scheduler" | "output";
 }
 
+/**
+ * One onset-to-flash estimate (spec §11 item 4), taken at `at` (epoch ms): the scheduler queued
+ * the onset `lead` ms ahead of the audio clock; the speaker plays that clock `outputLatency` plus
+ * `baseLatency` ms behind; and the first frame whose audio-linked helpers saw the onset ran
+ * `onsetToFlash` ms after the speaker played it. The display's own delay is not in it.
+ */
+export interface Sync {
+  readonly at: number;
+  readonly lead: number;
+  readonly outputLatency: number;
+  readonly baseLatency: number;
+  readonly onsetToFlash: number;
+}
+
 /** An error the playing code threw, and the Visual Part that threw it when it was one. */
 export interface PlaybackError {
   readonly message: string;
@@ -75,5 +89,7 @@ export class Strudel extends Context.Tag("Strudel")<
     readonly playbackErrors: Stream.Stream<PlaybackError>;
     /** Each late note from now on (spec §11). */
     readonly lateNotes: Stream.Stream<LateNote>;
+    /** An onset-to-flash estimate from time to time while playing, from now on (spec §11). */
+    readonly syncs: Stream.Stream<Sync>;
   }
 >() {}

@@ -1,5 +1,6 @@
 import { Duration, Effect, Layer } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import type { Log } from "../core/Instrumentation";
 import { hangs, makeFakeEditor, makeFakeModel, makeFakePage, makeFakeStrudel } from "../core/fakes";
 import { revOf } from "../core/Performance";
 import { transportPollInterval } from "../core/ViewModelStore";
@@ -12,6 +13,19 @@ const setup = (source: string, replies: ReadonlyArray<unknown> = []) => {
   const page = Effect.runSync(makeFakePage());
   const facade = createFacade(Layer.mergeAll(editor.layer, strudel.layer, model.layer, page.layer));
   return { editor, strudel, model, page, facade };
+};
+
+/** The log `facade` hands over once `until` holds of it, as what it records may come later. */
+const logOnce = async (
+  { page, facade }: Pick<ReturnType<typeof setup>, "page" | "facade">,
+  until: (log: Partial<Log>) => boolean,
+) => {
+  const latest = () => JSON.parse(page.downloads.at(-1)?.text ?? "{}") as Partial<Log>;
+  await vi.waitUntil(async () => {
+    await facade.downloadLog();
+    return until(latest());
+  });
+  return latest();
 };
 
 /** Waits out one poll of the transport on the real clock. */
@@ -164,6 +178,68 @@ describe("façade", () => {
       { at: before + 5, lateBy: 12, duringTurn: false },
       { lateBy: 30, duringTurn: true },
     ]);
+    await facade.dispose();
+  });
+  it("downloadLog() has the frame times of the second after each Apply, with its Visual Parts", async () => {
+    const { editor, page, facade } = setup('kick: s("bd*4")');
+    Effect.runSync(page.drawFrames([16.7, 16.6, 50, 16.7, 116.6], 16.7));
+    await facade.apply();
+    Effect.runSync(
+      editor.type(
+        'kick: s("bd*4")\n' +
+          "flash: hydra`osc().out()`\n" +
+          "_muted: hydra`noise().out(o1)`\n" +
+          "glow: hydra`shape().out(o2)`",
+      ),
+    );
+    const applied = Date.now();
+    await facade.apply();
+    const log = await logOnce({ page, facade }, ({ frameTimes }) => frameTimes?.length === 2);
+
+    const { frameTimes } = log;
+    expect(frameTimes).toMatchObject([
+      { visualParts: 0, frames: [16.7, 16.6, 50, 16.7, 116.6], longest: 116.6, dropped: 8 },
+      { visualParts: 2, frames: [16.7, 16.6, 50, 16.7, 116.6], longest: 116.6, dropped: 8 },
+    ]);
+    expect(frameTimes?.[1]?.at).toBeGreaterThanOrEqual(applied);
+    await facade.dispose();
+  });
+
+  it("downloadLog() counts frames dropped by the display's rate before the Apply", async () => {
+    const { page, facade } = setup("flash: hydra`osc().out()`");
+    // A 60 Hz display falling to a steady 30 fps.
+    Effect.runSync(page.drawFrames([33.4, 33.4, 33.4, 33.4], 16.7));
+    await facade.apply();
+    const log = await logOnce({ page, facade }, ({ frameTimes }) => frameTimes?.length === 1);
+
+    expect(log.frameTimes).toMatchObject([{ longest: 33.4, dropped: 4 }]);
+    await facade.dispose();
+  });
+
+  it("downloadLog() counts only the soloed Visual Parts while one is, and no failed Apply", async () => {
+    const { editor, strudel, page, facade } = setup(
+      "a: hydra`osc().out()`\nb: hydra`noise().out(o1)`\nc: hydra`shape().out(o2)`",
+    );
+    Effect.runSync(strudel.failWith("Unexpected token"));
+    await facade.apply();
+    Effect.runSync(strudel.succeed);
+    Effect.runSync(
+      editor.type("a: hydra`osc().out()`\nSb: hydra`noise().out(o1)`\nc: hydra`shape().out(o2)`"),
+    );
+    await facade.apply();
+    const log = await logOnce({ page, facade }, ({ frameTimes }) => frameTimes?.length === 1);
+
+    expect(log).toMatchObject({ frameTimes: [{ visualParts: 1 }] });
+    await facade.dispose();
+  });
+
+  it("downloadLog() has each onset-to-flash estimate", async () => {
+    const { strudel, page, facade } = setup("");
+    const sync = { at: Date.now(), lead: 104, outputLatency: 88, baseLatency: 12, onsetToFlash: 9 };
+    Effect.runSync(strudel.synced(sync));
+    const log = await logOnce({ page, facade }, ({ syncs }) => syncs?.length === 1);
+
+    expect(log.syncs).toEqual([sync]);
     await facade.dispose();
   });
 });

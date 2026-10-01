@@ -1,6 +1,6 @@
 import { parse } from "acorn";
 import { describe, expect, it } from "vitest";
-import { evalErrorOf, lateAtOutput, playbackErrorOf } from "./strudel";
+import { evalErrorOf, lateAtOutput, playbackErrorOf, withOnsets } from "./strudel";
 
 describe("evalErrorOf", () => {
   it("takes a syntax error's offset, and drops its position in the composition", () => {
@@ -71,5 +71,26 @@ describe("lateAtOutput", () => {
     expect(played).toEqual([10.1, 10.15]);
     expect(late).toHaveLength(1);
     expect(late[0]).toBeCloseTo(50);
+  });
+});
+
+describe("withOnsets", () => {
+  it("tells of each onset's time, and plays the note even when telling throws", () => {
+    const played: Array<number> = [];
+    const told: Array<number> = [];
+    const output = withOnsets(
+      (_hap, _deadline, _duration, _cps, time) => {
+        played.push(time);
+      },
+      (time) => {
+        told.push(time);
+        throw new Error("no output timestamp");
+      },
+    );
+
+    output({}, 0.1, 0.25, 0.5, 10.1);
+
+    expect(told).toEqual([10.1]);
+    expect(played).toEqual([10.1]);
   });
 });

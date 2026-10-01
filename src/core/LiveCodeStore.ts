@@ -1,4 +1,14 @@
-import { Context, Data, Effect, Either, Layer, type Stream, SubscriptionRef } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  Either,
+  Layer,
+  PubSub,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import { Editor } from "./Editor";
 import { ErrorSlotStore } from "./ErrorSlotStore";
 import {
@@ -43,6 +53,12 @@ export type VisualOutputs = ReadonlyMap<string, ReadonlyArray<VisualOutput>>;
 export const outputsOf = (part: Part, outputs: VisualOutputs) =>
   part.surface === "visual" ? outputs.get(part.text) : undefined;
 
+/** An Apply that evaluated: when it began to (epoch ms), and the composition it evaluated. */
+export interface Applied {
+  readonly at: number;
+  readonly code: string;
+}
+
 /** The Live code, and Apply: the one way it changes (spec §5). */
 export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
   LiveCodeStore,
@@ -62,6 +78,8 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
       scope: Scope,
       written?: ReadonlyMap<string, string>,
     ) => Effect.Effect<boolean, EvalError>;
+    /** Each Apply that evaluated, from now on. */
+    readonly applied: Stream.Stream<Applied>;
     /**
      * Makes the in-Scope Parts' current text their Live code without evaluating anything, as an
      * agent Apply on a stopped transport does (spec §5); with `written`, as `apply` does.
@@ -96,6 +114,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
       const errorSlot = yield* ErrorSlotStore;
       const ref = yield* SubscriptionRef.make(noLiveCode);
       const outputs = yield* SubscriptionRef.make<VisualOutputs>(new Map());
+      const applied = yield* PubSub.unbounded<Applied>();
       // One Apply or dry-run at a time, so each composes from the Live code the last Apply left.
       const lock = yield* Effect.makeSemaphore(1);
 
@@ -107,6 +126,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
             const live = yield* SubscriptionRef.get(ref);
             const composition = compose(performance, live, scope);
             const before = yield* errorSlot.current;
+            const at = yield* Clock.currentTimeMillis;
             yield* strudel.evaluate(composition.code).pipe(
               Effect.tapError(({ message, offset }) => {
                 const part = offset === undefined ? undefined : unitAt(composition, offset);
@@ -119,6 +139,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
             );
             yield* SubscriptionRef.set(ref, liveCodeAfter(performance, live, scope));
             yield* errorSlot.clearIfStill(before);
+            yield* PubSub.publish(applied, { at, code: composition.code });
             return true;
           }),
         );
@@ -199,6 +220,7 @@ export class LiveCodeStore extends Context.Tag("LiveCodeStore")<
         current: SubscriptionRef.get(ref),
         changes: ref.changes,
         apply,
+        applied: Stream.fromPubSub(applied),
         setLiveCode,
         dryRun,
         outputs: SubscriptionRef.get(outputs),

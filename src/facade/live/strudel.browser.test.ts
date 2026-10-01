@@ -1,7 +1,7 @@
 import { userEvent } from "@vitest/browser/context";
 import { Clock, Effect, Either, Stream } from "effect";
 import { expect, test } from "vitest";
-import { type LateNote, Strudel } from "../../core/Strudel";
+import { type LateNote, Strudel, type Sync } from "../../core/Strudel";
 import { StrudelLive } from "./strudel";
 
 const withStrudel = <A, E>(use: (strudel: Strudel["Type"]) => Effect.Effect<A, E>) =>
@@ -78,6 +78,42 @@ test(
       expect(note.where).toBe("scheduler");
       expect(note.lateBy).toBeGreaterThan(0);
       expect(note.at).toBeGreaterThanOrEqual(stalledAt);
+    }
+  },
+);
+
+test(
+  "while playing, about once a second an onset is timed from the speaker to the frame that sees it",
+  { timeout: 20_000 },
+  async () => {
+    await userEvent.click(document.body);
+    const synced: Array<Sync> = [];
+
+    const startedAt = await withStrudel((strudel) =>
+      Effect.gen(function* () {
+        yield* Effect.fork(
+          Stream.runForEach(strudel.syncs, (sync) => Effect.sync(() => synced.push(sync))),
+        );
+        const startedAt = yield* Clock.currentTimeMillis;
+        yield* strudel.evaluate('s("hh*16").gain(0)');
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 2500)));
+        yield* strudel.stop;
+        return startedAt;
+      }),
+    );
+
+    expect(synced.length).toBeGreaterThanOrEqual(2);
+    expect(synced.length).toBeLessThanOrEqual(3);
+    for (const sync of synced) {
+      expect(sync.at).toBeGreaterThan(startedAt);
+      // Strudel queues notes about 100 ms ahead, and up to a tick more.
+      expect(sync.lead).toBeGreaterThan(0);
+      expect(sync.lead).toBeLessThan(400);
+      expect(sync.outputLatency).toBeGreaterThanOrEqual(0);
+      // Headless Chromium's latencies wander, so only that it was measured: a judgement needs
+      // real Chrome on real speakers.
+      expect(Number.isFinite(sync.onsetToFlash)).toBe(true);
+      expect(Math.abs(sync.onsetToFlash)).toBeLessThan(1000);
     }
   },
 );

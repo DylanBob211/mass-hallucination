@@ -1,31 +1,52 @@
 import type { Repl } from "@strudel/web";
 import { Effect, Layer, Stream } from "effect";
-import { EvalError, type LateNote, type PlaybackError, Strudel } from "../../core/Strudel";
+import {
+  EvalError,
+  type LateNote,
+  type PlaybackError,
+  Strudel,
+  type Sync,
+} from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
 import { audibleTimeOf, audioLinkedHelpers, followParts } from "./audioLinked";
+import { sampleSync } from "./sync";
 import { checkHydraShape, createVisualDryRun, type VisualDryRun } from "./visualDryRun";
 import { createVisuals, type Visuals, VisualError } from "./visuals";
+
+/** Strudel's audio output, as `webaudioOutput` is and `initStrudel`'s `defaultOutput` takes. */
+type Output = (
+  hap: unknown,
+  deadline: number,
+  duration: number,
+  cps: number,
+  time: number,
+) => unknown;
 
 /**
  * Strudel's audio output `output`, telling `onLate` how many milliseconds late each note is that
  * reaches it after its time on the audio clock, which superdough drops (spec §11).
  */
 export const lateAtOutput =
-  (
-    output: (
-      hap: unknown,
-      deadline: number,
-      duration: number,
-      cps: number,
-      time: number,
-    ) => unknown,
-    currentTime: () => number,
-    onLate: (lateBy: number) => void,
-  ) =>
-  (hap: unknown, deadline: number, duration: number, cps: number, time: number) => {
+  (output: Output, currentTime: () => number, onLate: (lateBy: number) => void): Output =>
+  (hap, deadline, duration, cps, time) => {
     const now = currentTime();
     if (time < now) onLate((now - time) * 1000);
+    return output(hap, deadline, duration, cps, time);
+  };
+
+/**
+ * Strudel's audio output `output`, telling `onOnset` the audio time of each event it is given
+ * (only those with an onset). Whatever `onOnset` throws is dropped, so the note still plays.
+ */
+export const withOnsets =
+  (output: Output, onOnset: (time: number) => void): Output =>
+  (hap, deadline, duration, cps, time) => {
+    try {
+      onOnset(time);
+    } catch {
+      // Instrumentation never costs a note.
+    }
     return output(hap, deadline, duration, cps, time);
   };
 
@@ -63,11 +84,13 @@ const watchSkippedTicks = (
 /**
  * Loads `@strudel/web` from the bundle and builds its repl. Browsers keep audio suspended until
  * the page has had a user gesture, so this runs only after one. Each late note goes to `onLate`
- * until `unwatch` is called, and each Visual Part's playback error to `onVisualError`.
+ * until `unwatch` is called, each onset-to-flash estimate to `onSync`, and each Visual Part's
+ * playback error to `onVisualError`.
  */
 const boot = async (
   onEvalError: (error: unknown) => void,
   onLate: (note: LateNote) => void,
+  onSync: (sync: Sync) => void,
   onVisualError: (error: PlaybackError) => void,
 ): Promise<{ readonly repl: Repl; readonly visuals: Visuals; readonly unwatch: () => void }> => {
   const strudel = await import("@strudel/web");
@@ -75,11 +98,23 @@ const boot = async (
   const late = (where: LateNote["where"]) => (lateBy: number) => {
     onLate({ at: Date.now(), lateBy, where });
   };
+  const onset = sampleSync(
+    {
+      audioContext: strudel.getAudioContext,
+      now: () => performance.now(),
+      wallClock: Date.now,
+      frame: (draw) => requestAnimationFrame(draw),
+    },
+    onSync,
+  );
   const parts = followParts(strudel.Pattern.prototype);
   const repl = await strudel.initStrudel({
     onEvalError,
     // The repl takes this in place of its own output (`webaudioRepl`, research for ticket 12).
-    defaultOutput: lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
+    defaultOutput: withOnsets(
+      lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
+      onset,
+    ),
     beforeEval: parts.beforeEval,
     afterEval: parts.afterEval,
   });
@@ -114,6 +149,7 @@ export const StrudelLive = Layer.scoped(
     let visualDryRun: Promise<VisualDryRun> | undefined;
     let unwatch: (() => void) | undefined;
     const lateListeners = new Set<(note: LateNote) => void>();
+    const syncListeners = new Set<(sync: Sync) => void>();
     const visualErrorListeners = new Set<(error: PlaybackError) => void>();
     // The error Strudel reported during the evaluate in flight; evaluates run one at a time.
     let reported: { error: unknown } | undefined;
@@ -127,6 +163,9 @@ export const StrudelLive = Layer.scoped(
         (error) => (reported = { error }),
         (note) => {
           for (const listener of lateListeners) listener(note);
+        },
+        (sync) => {
+          for (const listener of syncListeners) listener(sync);
         },
         (error) => {
           for (const listener of visualErrorListeners) listener(error);
@@ -234,6 +273,7 @@ export const StrudelLive = Layer.scoped(
       position: Effect.sync(() => repl?.scheduler.now() ?? 0),
       playbackErrors: Stream.merge(audioPlaybackErrors, streamFrom(visualErrorListeners)),
       lateNotes: streamFrom(lateListeners),
+      syncs: streamFrom(syncListeners),
     };
   }),
 );

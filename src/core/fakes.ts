@@ -16,6 +16,7 @@ import {
   type LateNote,
   type PlaybackError,
   Strudel,
+  type Sync,
   type VisualErrorKind,
 } from "./Strudel";
 import type { Transport, VisualOutput } from "./viewModel";
@@ -51,6 +52,7 @@ export const makeFakeStrudel = () =>
   Effect.gen(function* () {
     const playbackErrors = yield* PubSub.unbounded<PlaybackError>();
     const lateNotes = yield* PubSub.unbounded<LateNote>();
+    const syncs = yield* PubSub.unbounded<Sync>();
     const evaluated: string[] = [];
     const dryRuns: string[] = [];
     let transport: Transport = { started: false, cps: 0.5 };
@@ -111,6 +113,7 @@ export const makeFakeStrudel = () =>
         position: Effect.sync(() => position),
         playbackErrors: Stream.fromPubSub(playbackErrors),
         lateNotes: Stream.fromPubSub(lateNotes),
+        syncs: Stream.fromPubSub(syncs),
       }),
       evaluated,
       dryRuns,
@@ -159,6 +162,8 @@ export const makeFakeStrudel = () =>
       /** Has a note come `lateBy` milliseconds too late, at `at`. */
       noteLate: (at: number, lateBy: number, where: LateNote["where"] = "scheduler") =>
         PubSub.publish(lateNotes, { at, lateBy, where }),
+      /** Has an onset-to-flash estimate be taken. */
+      synced: (sync: Sync) => PubSub.publish(syncs, sync),
       /** Makes later evaluates wait until `releaseEvaluates`. */
       holdEvaluates: Effect.map(Deferred.make<undefined>(), (gate) => {
         held = gate;
@@ -270,18 +275,39 @@ export const makeFakeModel = (replies: ReadonlyArray<unknown>) => {
   };
 };
 
-/** A `Page` whose long tasks the test reports, keeping every file it was asked to download. */
+/**
+ * A `Page` whose long tasks and frames the test reports, keeping every file it was asked to
+ * download. It draws no frames until told to.
+ */
 export const makeFakePage = () =>
   Effect.gen(function* () {
     const longTasks = yield* PubSub.unbounded<LongTask>();
     const downloads: Array<{ readonly name: string; readonly text: string }> = [];
+    let drawing = { steady: 0, gaps: [] as ReadonlyArray<number> };
     return {
       layer: Layer.succeed(Page, {
         longTasks: Stream.fromPubSub(longTasks),
+        frames: (from, to) =>
+          Effect.sync(() => {
+            const { steady, gaps } = drawing;
+            const drawn = [from];
+            let at = from;
+            while (steady > 0 && at + steady <= (from + to) / 2) drawn.push((at += steady));
+            for (const gap of gaps) drawn.push((at += gap));
+            return drawn;
+          }),
         download: (name, text) => Effect.sync(() => downloads.push({ name, text })),
       }),
       /** Has the main thread run one task for `duration` milliseconds from `at`. */
       longTask: (at: number, duration: number) => PubSub.publish(longTasks, { at, duration }),
+      /**
+       * Has the page draw frames `steady` ms apart in the first half of every later wait (none, by
+       * default), then `gaps` ms apart.
+       */
+      drawFrames: (gaps: ReadonlyArray<number>, steady = 0) =>
+        Effect.sync(() => {
+          drawing = { steady, gaps };
+        }),
       downloads,
     };
   });
