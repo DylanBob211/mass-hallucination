@@ -1,3 +1,5 @@
+import hydraInStrudel from "../../reference/hydra-in-strudel.txt?raw";
+import hydraIndex from "../../reference/hydra-index.txt?raw";
 import doNotUse from "../../reference/strudel-do-not-use.txt?raw";
 import strudelIndex from "../../reference/strudel-index.txt?raw";
 import strudelVsTidal from "../../reference/strudel-vs-tidal.txt?raw";
@@ -35,7 +37,12 @@ Before calling the tool, write one short plain-text line saying what you are abo
 
 If no change is warranted, or the Instruction is a question, answer in a few plain words without calling the tool.
 
-Use only Strudel functions from the reference below, and none from the do-not-use list.`;
+Use only Strudel functions from the reference below, and none from the do-not-use list. In a Visual Part, use only the Hydra names and helpers the reference gives.`;
 
-/** The grounding reference (spec §9): what this app's Strudel can call, and what to avoid. */
-export const reference = [strudelIndex, strudelVsTidal, doNotUse].join("\n\n");
+/**
+ * The grounding reference (spec §9): what this app's Strudel and Hydra can call, what to avoid, and
+ * how a Visual Part runs.
+ */
+export const reference = [strudelIndex, strudelVsTidal, doNotUse, hydraIndex, hydraInStrudel].join(
+  "\n\n",
+);

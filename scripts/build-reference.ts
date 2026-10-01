@@ -1,13 +1,15 @@
-// `pnpm build:reference`: writes the Strudel grounding text the agent's cached prompt carries
-// (spec §9 items 1–2) into src/reference/, from the versions pnpm-lock.yaml pins. Re-run whenever
-// a pin moves; `pnpm check:reference` fails the build until then. The do-not-use list (§9.3) is
-// hand-kept and not written here.
+// `pnpm build:reference`: writes the Strudel and Hydra grounding text the agent's cached prompt
+// carries (spec §9 items 1, 2 and 4) into src/reference/, from the versions pnpm-lock.yaml pins.
+// Re-run whenever a pin moves; `pnpm check:reference` fails the build until then. The do-not-use
+// list (§9.3) and the "Hydra inside Strudel" note (§9.5) are hand-kept and not written here.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import hydraRegistry from "hydra-synth/src/glsl/glsl-functions.js";
 import { bundleNames } from "./reference/bundle.ts";
+import { hydraIndex, hydraRuntime } from "./reference/hydraIndex.ts";
 import { strudelIndex, type DocEntry } from "./reference/strudelIndex.ts";
 import { lockedVersions, versionsLine } from "./reference/versions.ts";
 
@@ -36,6 +38,16 @@ function pinned(pkg: string): string {
 
 const web = pinned("@strudel/web");
 const core = pinned("@strudel/core");
+const hydra = pinned("hydra-synth");
+const installed = (
+  JSON.parse(readFileSync(join(root, "node_modules/hydra-synth/package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
+if (installed !== hydra)
+  throw new Error(
+    `node_modules has hydra-synth@${installed}, the lockfile pins ${hydra}: run pnpm install`,
+  );
 
 // 1. The Strudel monorepo at the commit that published both pins.
 mkdirSync(cache, { recursive: true });
@@ -99,10 +111,10 @@ const { docs } = JSON.parse(readFileSync(join(checkout, "doc.json"), "utf8")) as
 };
 
 // 3. The outputs, each headed by the versions it came from.
-const versions =
+const strudelVersions =
   versionsLine([`@strudel/web@${web}`, `@strudel/core@${core}`]) +
   ` (codeberg.org/uzu/strudel commit ${commit})`;
-const write = (file: string, title: string, body: string) => {
+const write = (file: string, title: string, body: string, versions = strudelVersions) => {
   const text = `${title}\n${versions}\n\n${body}`;
   writeFileSync(join(out, file), text);
   const chars = text.length;
@@ -121,4 +133,13 @@ write(
   "strudel-vs-tidal.txt",
   "Strudel vs Tidal, verbatim from Strudel's website/src/pages/learn/strudel-vs-tidal.mdx.",
   readFileSync(join(checkout, "website/src/pages/learn/strudel-vs-tidal.mdx"), "utf8"),
+);
+
+// 4. The Hydra index, from the registry of the hydra-synth the app bundles.
+const registry = hydraRegistry();
+write(
+  "hydra-index.txt",
+  `Hydra functions a Visual Part can call (${String(registry.length)}, from hydra-synth's src/glsl/glsl-functions.js): name(input=default, …) by type, then the rest of Hydra a Visual Part can use. Nothing else exists: no blur, mirror, glow or sharpen.`,
+  [...hydraIndex(registry), ...hydraRuntime].join("\n") + "\n",
+  versionsLine([`hydra-synth@${hydra}`]),
 );

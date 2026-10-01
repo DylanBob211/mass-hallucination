@@ -1,0 +1,11 @@
+Hydra inside this Performance: how a Visual Part works. Hand-kept; correct it when the host changes.
+Versions: hydra-synth@1.4.0 @strudel/web@1.3.0
+
+A Visual Part is a Part whose whole expression is a hydra template: viz: hydra`osc(10, 0.1, () => pulse('kick')).kaleid(4).out(o0)`. Its body is plain Hydra, not Strudel: no ${…}.
+In scope are only the Hydra names above and four helpers that follow what is heard (0 for a Part muted or soloed out):
+- cycle(): the Strudel cycle position; it follows setcps.
+- pulse('kick'): 1 on each onset of the Part kick, decaying to 0.
+- value('bass', 'gain'): the current value of that control in the Part bass.
+- level('kick'): kick's heard loudness, 0..1. It needs .analyze('kick') on the Part kick.
+Read a helper inside a function, () => level('kick'), or it is read only once. JavaScript's own globals (Math, …) are there too; nothing from Strudel or the Preamble is. There is no microphone: never use the global a, a.fft or H (the .a() of a chain is fine).
+Only o0 is shown, and the host owns the canvas: never call render, hush or setResolution. The last .out() into an output wins, so a warning "glow hides viz on o0" means your Part covered another one. To keep both, draw one into o1 and blend src(o1) into the other.

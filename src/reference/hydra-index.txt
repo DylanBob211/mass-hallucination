@@ -1,0 +1,70 @@
+Hydra functions a Visual Part can call (52, from hydra-synth's src/glsl/glsl-functions.js): name(input=default, …) by type, then the rest of Hydra a Visual Part can use. Nothing else exists: no blur, mirror, glow or sharpen.
+Versions: hydra-synth@1.4.0
+
+## sources
+noise(scale=10, offset=0.1)
+voronoi(scale=5, speed=0.3, blending=0.3)
+osc(frequency=60, sync=0.1, offset=0)
+shape(sides=3, radius=0.3, smoothing=0.01)
+gradient(speed=0)
+src(tex)
+solid(r=0, g=0, b=0, a=1)
+prev()
+## geometry
+rotate(angle=10, speed=0)
+scale(amount=1.5, xMult=1, yMult=1, offsetX=0.5, offsetY=0.5)
+pixelate(pixelX=20, pixelY=20)
+repeat(repeatX=3, repeatY=3, offsetX=0, offsetY=0)
+repeatX(reps=3, offset=0)
+repeatY(reps=3, offset=0)
+kaleid(nSides=4)
+scroll(scrollX=0.5, scrollY=0.5, speedX=0, speedY=0)
+scrollX(scrollX=0.5, speed=0)
+scrollY(scrollY=0.5, speed=0)
+## colour
+posterize(bins=3, gamma=0.6)
+shift(r=0.5, g=0, b=0, a=0)
+invert(amount=1)
+contrast(amount=1.6)
+brightness(amount=0.4)
+luma(threshold=0.5, tolerance=0.1)
+thresh(threshold=0.5, tolerance=0.04)
+color(r=1, g=1, b=1, a=1)
+saturate(amount=2)
+hue(hue=0.4)
+colorama(amount=0.005)
+sum(scale=1)
+r(scale=1, offset=0)
+g(scale=1, offset=0)
+b(scale=1, offset=0)
+a(scale=1, offset=0)
+## blend (texture first)
+add(tex, amount=1)
+sub(tex, amount=1)
+layer(tex)
+blend(tex, amount=0.5)
+mult(tex, amount=1)
+diff(tex)
+mask(tex)
+## modulate (texture first)
+modulateRepeat(tex, repeatX=3, repeatY=3, offsetX=0.5, offsetY=0.5)
+modulateRepeatX(tex, reps=3, offset=0.5)
+modulateRepeatY(tex, reps=3, offset=0.5)
+modulateKaleid(tex, nSides=4)
+modulateScrollX(tex, scrollX=0.5, speed=0)
+modulateScrollY(tex, scrollY=0.5, speed=0)
+modulate(tex, amount=0.1)
+modulateScale(tex, multiple=1, offset=1)
+modulatePixelate(tex, multiple=10, offset=3)
+modulateRotate(tex, multiple=1, offset=0)
+modulateHue(tex, amount=1)
+## runtime (not in the registry)
+.out(output=o0) — ends a chain: draws it into an output
+o0 o1 o2 o3 — the outputs; src(o1) reads one, and src(o0) inside a chain into o0 is feedback
+s0 s1 s2 s3 — sources: s0.initImage(url), s0.initVideo(url), s0.clear(); src(s0) reads one
+time — Hydra's seconds, times speed; not the music's time
+speed=1 — how fast time runs
+bpm=30 — how fast an array parameter steps through its values
+width height — the canvas size in pixels
+update=(dt)=>{} afterUpdate=(dt)=>{} — assign a function to run before / after each frame
+[1, 2, 3] as a parameter steps through its values; arrays have .fast(speed=1) .smooth(smooth=1) .ease(ease='linear') .offset(offset=0.5) .fit(low=0, high=1)

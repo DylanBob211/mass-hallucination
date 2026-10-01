@@ -7,7 +7,13 @@ import { staleReferences } from "./reference/versions.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const dir = join(root, "src/reference");
-const expected = ["strudel-index.txt", "strudel-vs-tidal.txt", "strudel-do-not-use.txt"];
+const expected = [
+  "strudel-index.txt",
+  "strudel-vs-tidal.txt",
+  "strudel-do-not-use.txt",
+  "hydra-index.txt",
+  "hydra-in-strudel.txt",
+];
 const present = readdirSync(dir);
 const files = present.map((file) => ({
   path: `src/reference/${file}`,
