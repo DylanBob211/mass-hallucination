@@ -24,6 +24,8 @@ declare module "@strudel/web" {
       readonly lastTick: number;
       readonly lastBegin: number;
       readonly lastEnd: number;
+      /** How far ahead of a tick's time, in seconds, its notes are played. */
+      readonly latency: number;
       /** The pattern it plays, once one is set. */
       readonly pattern?: Pattern;
     };
@@ -54,11 +56,19 @@ declare module "@strudel/web" {
     /** The events in `state`'s span. Throws what the pattern throws, where `queryArc` logs it. */
     query(state: State): ReadonlyArray<unknown>;
     /** The events from cycle `begin` to `end`, logging and swallowing what the pattern throws. */
-    queryArc(begin: number, end: number): ReadonlyArray<{ hasOnset(): boolean }>;
+    queryArc(begin: number, end: number): ReadonlyArray<Hap>;
     /** Registers the pattern under `id`; replaced by the repl on every evaluate. */
     p: (this: Pattern, id: unknown) => Pattern;
     /** Plays the pattern on the repl's scheduler. */
     play: (this: Pattern) => Pattern;
+  }
+  /** An event: its value, such as `{ s: "bd" }`, over its whole span, in cycles (`Fraction`s). */
+  export interface Hap {
+    /** A continuous signal's event has none. */
+    readonly whole?: { readonly begin: unknown; readonly end: unknown };
+    readonly value: unknown;
+    /** Whether it starts within the span queried. */
+    hasOnset(): boolean;
   }
   /** What a query asks for: a span of cycles. */
   export interface State {
@@ -80,6 +90,15 @@ declare module "@strudel/web" {
     code: string,
     options?: Record<string, unknown>,
   ): { readonly output: string };
+  /**
+   * superdough's latest samples, `type` `"time"`, of the analyser that `.analyze(id)` feeds, any
+   * string `id` (spike, ticket 14); `undefined` before a note with it has played.
+   */
+  export function getAnalyzerData(type: "time", id: string): Float32Array | undefined;
+  /** Whether `name` is a note name such as `eb3`. */
+  export function isNote(name: string): boolean;
+  /** The MIDI number of a note name; throws for anything else. */
+  export function noteToMidi(name: string): number;
   /** The playing pattern, as last handed to the scheduler. */
   export function getPattern(): Pattern | undefined;
 }

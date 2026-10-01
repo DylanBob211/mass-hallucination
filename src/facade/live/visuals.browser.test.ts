@@ -263,3 +263,40 @@ test(
     expect(slot).toEqual({ message: "nope is not defined", phase: "playback", part: "viz" });
   },
 );
+
+/** Long enough for the notes queued at an evaluate to reach the speaker. */
+const untilHeard = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 600)));
+
+test("a Visual Part's helpers follow a heard Part", { timeout: 20_000 }, async () => {
+  // Onsets every 125 ms, so a pulse never decays to 0; c2 is MIDI 36.
+  const colour = await withStrudel((strudel) =>
+    Effect.gen(function* () {
+      yield* strudel.evaluate(
+        'kick: note("c2*16").s("sine").analyze(\'kick\')\n' +
+          "viz: hydra`solid(() => level('kick') > 0 ? 1 : 0, () => pulse('kick') > 0 && cycle() > 0 ? 1 : 0, () => value('kick', 'note') === 36 ? 0 : 1).out()`",
+      );
+      yield* untilHeard;
+      return yield* seen;
+    }),
+  );
+
+  expect(colour).toEqual([255, 255, 0]);
+});
+
+test.each([
+  ["muted", "_kick"],
+  ["soloed out", 'Shats: s("hh*8")\nkick'],
+])("a Visual Part's helpers give 0 for a Part %s", { timeout: 20_000 }, async (_, label) => {
+  const colour = await withStrudel((strudel) =>
+    Effect.gen(function* () {
+      yield* strudel.evaluate(
+        `${label}: note("c2*16").s("sine").analyze('kick')\n` +
+          "viz: hydra`solid(() => level('kick') + pulse('kick') + value('kick', 'note'), 0, 0).out()`",
+      );
+      yield* untilHeard;
+      return yield* seen;
+    }),
+  );
+
+  expect(colour).toEqual([0, 0, 0]);
+});

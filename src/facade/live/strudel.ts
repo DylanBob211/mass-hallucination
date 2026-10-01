@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect";
 import { EvalError, type LateNote, type PlaybackError, Strudel } from "../../core/Strudel";
 import { initialViewModel } from "../../core/viewModel";
 import { evaluateDry, sameControlIn, synonymsSetTwice } from "./dryRun";
+import { audibleTimeOf, audioLinkedHelpers, followParts } from "./audioLinked";
 import { checkHydraShape, createVisualDryRun, type VisualDryRun } from "./visualDryRun";
 import { createVisuals, type Visuals, VisualError } from "./visuals";
 
@@ -74,12 +75,22 @@ const boot = async (
   const late = (where: LateNote["where"]) => (lateBy: number) => {
     onLate({ at: Date.now(), lateBy, where });
   };
+  const parts = followParts(strudel.Pattern.prototype);
   const repl = await strudel.initStrudel({
     onEvalError,
     // The repl takes this in place of its own output (`webaudioRepl`, research for ticket 12).
     defaultOutput: lateAtOutput(strudel.webaudioOutput, currentTime, late("output")),
+    beforeEval: parts.beforeEval,
+    afterEval: parts.afterEval,
   });
-  const visuals = await createVisuals(strudel.silence, onVisualError);
+  const helpers = audioLinkedHelpers({
+    scheduler: repl.scheduler,
+    audibleTime: () => audibleTimeOf(strudel.getAudioContext(), performance.now()),
+    heard: parts.heard,
+    analyzerData: (id) => strudel.getAnalyzerData("time", id),
+    noteToMidi: (name) => (strudel.isNote(name) ? strudel.noteToMidi(name) : undefined),
+  });
+  const visuals = await createVisuals(strudel.silence, onVisualError, helpers);
   await strudel.evalScope({ hydra: visuals.hydra });
   // initStrudel defers audio setup (worklets included) to the first mousedown. The performer's
   // first gesture is usually a key, so send it the one it waits for.

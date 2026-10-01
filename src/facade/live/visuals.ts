@@ -2,6 +2,7 @@ import { parse } from "acorn";
 import type { Output, Source } from "hydra-synth";
 import { hydraTemplateOf, parseOptions, readLabel } from "../../core/Performance";
 import type { PlaybackError, VisualErrorKind } from "../../core/Strudel";
+import type { AudioLinkedHelpers } from "./audioLinked";
 
 /**
  * The host's Hydra glue in place of `@strudel/hydra` (spec §8, ADR 0002 amendment): one live
@@ -68,12 +69,14 @@ export interface VisualPart {
 }
 
 /**
- * Builds the canvas and the live Hydra; `silence` is what the tag gives Strudel. Each Visual Part
- * that fails while drawing goes to `onPlaybackError` the first time it does after an evaluate.
+ * Builds the canvas and the live Hydra; `silence` is what the tag gives Strudel, and `helpers`
+ * are in scope in every Visual Part. Each Visual Part that fails while drawing goes to
+ * `onPlaybackError` the first time it does after an evaluate.
  */
 export const createVisuals = async (
   silence: unknown,
   onPlaybackError: (error: PlaybackError) => void,
+  helpers: AudioLinkedHelpers,
 ): Promise<Visuals> => {
   const { default: Hydra } = await import("hydra-synth");
   const canvas = document.createElement("canvas");
@@ -174,11 +177,15 @@ export const createVisuals = async (
   };
   addEventListener("resize", resize);
 
-  const scope = hydraScope(hydra.synth, (name, value) =>
-    // Hydra calls these on every frame, as it does a parameter function.
-    (name === "update" || name === "afterUpdate") && typeof value === "function" && running
-      ? blaming(running, value as PerFrame)
-      : value,
+  const scope = hydraScope(
+    hydra.synth,
+    (name, value) =>
+      // Hydra calls these on every frame, as it does a parameter function.
+      (name === "update" || name === "afterUpdate") && typeof value === "function" && running
+        ? blaming(running, value as PerFrame)
+        : value,
+    // As a plain record of names.
+    { ...helpers },
   );
   let parts: Array<VisualPart> = [];
 
@@ -322,14 +329,15 @@ const glErrorName = (gl: WebGLRenderingContext, code: number) =>
   ).find((name) => gl[name] === code) ?? `error ${String(code)}`;
 
 /**
- * The names a Visual Part's body sees: Hydra's, and JavaScript's own. Everything else on
- * `globalThis`, Strudel's names included, is hidden, so `speed` or `sine` is not defined there. A
- * name the body assigns without declaring it is kept here, not on `globalThis`, so nothing leaks.
- * What it assigns to one of Hydra's names goes through `assigning` first.
+ * The names a Visual Part's body sees: Hydra's, the `helpers`, and JavaScript's own. Everything
+ * else on `globalThis`, Strudel's names included, is hidden, so `speed` or `sine` is not defined
+ * there. A name the body assigns without declaring it is kept here, not on `globalThis`, so
+ * nothing leaks. What it assigns to one of Hydra's names goes through `assigning` first.
  */
 export const hydraScope = (
   synth: Record<string, unknown>,
   assigning: (name: string, value: unknown) => unknown,
+  helpers: Readonly<Record<string, unknown>> = {},
 ): object => {
   const assigned = new Map<string, unknown>();
   return new Proxy(Object.create(null) as object, {
@@ -337,6 +345,7 @@ export const hydraScope = (
     get: (_, name) => {
       if (typeof name !== "string") return undefined;
       if (name in synth) return synth[name];
+      if (Object.hasOwn(helpers, name)) return helpers[name];
       if (assigned.has(name)) return assigned.get(name);
       throw new ReferenceError(`${name} is not defined`);
     },
