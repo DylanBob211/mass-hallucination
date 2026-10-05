@@ -13,6 +13,15 @@
   --color-removed: #ff8f8f;
   --color-agent: #8ecbff;
   --color-selection: rgb(255 204 102 / 0.25);
+  /* Syntax highlighting (ticket 21): light, so code reads on the line boxes over any visuals. */
+  --color-code-keyword: #d4b0ff;
+  --color-code-function: #9fe6d8;
+  --color-code-string: #f6c49a;
+  --color-code-mini: #c4e88f;
+  --color-code-number: #ffb3c7;
+  --color-code-label: #ffe08a;
+  --color-code-structure: #b9b4d6;
+  --color-code-helper: #ff9de2;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --editor-font-size: 15px;
 }

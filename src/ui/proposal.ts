@@ -1,6 +1,7 @@
 import { type EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { locateUnits, type ProposalView } from "../facade/facade";
+import { highlightedText } from "./highlight";
 import { blockPlace } from "./place";
 
 /** What the Proposal's buttons ask of the Performance; each duplicates a key (spec §10). */
@@ -94,7 +95,7 @@ class NewText extends WidgetType {
     block.className = this.stale ? "cm-proposal cm-proposal-stale" : "cm-proposal";
     const text = document.createElement("pre");
     text.className = "cm-proposal-new";
-    text.textContent = this.text;
+    text.append(highlightedText(this.text));
     block.append(text);
     const { commands } = this;
     if (commands !== undefined) {
@@ -128,7 +129,8 @@ class NewText extends WidgetType {
 
 /** Agent widgets sit on solid panels, readable over the visuals (ADR 0007). */
 const theme = EditorView.theme({
-  ".cm-proposal-old": {
+  // The text it replaces stays grey, its colours too.
+  ".cm-proposal-old, .cm-proposal-old *": {
     textDecoration: "line-through",
     textDecorationColor: "var(--color-removed)",
     color: "var(--color-dim)",
@@ -148,5 +150,7 @@ const theme = EditorView.theme({
   ".cm-proposal-keys button": { font: "inherit", cursor: "pointer" },
   ".cm-proposal-keys button:hover": { color: "var(--color-fg)" },
   ".cm-proposal-stale": { borderLeftColor: "var(--color-dim)", opacity: "0.5" },
-  ".cm-proposal-stale .cm-proposal-new": { color: "var(--color-dim)" },
+  ".cm-proposal-stale .cm-proposal-new, .cm-proposal-stale .cm-proposal-new *": {
+    color: "var(--color-dim)",
+  },
 });

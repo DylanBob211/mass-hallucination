@@ -6,6 +6,8 @@ import { showAgentWork } from "./agentWork";
 import { createEditor } from "./editor";
 import { showCodeView, showVisualError } from "./overVisuals";
 import { showProposal } from "./proposal";
+// The colour tokens the editor theme reads.
+import "../app.css";
 
 const mounted = (source: string, cursor = 0) => {
   const commands = {
@@ -28,6 +30,13 @@ const mounted = (source: string, cursor = 0) => {
   view.focus();
   return { view, commands };
 };
+
+/** A line's own text, without the widgets on it. */
+const sourceText = (line: Element | null | undefined) =>
+  [...(line?.childNodes ?? [])]
+    .filter((node) => !(node instanceof HTMLElement && node.contentEditable === "false"))
+    .map((node) => node.textContent)
+    .join("");
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -380,7 +389,7 @@ describe("the agent at work", () => {
     });
 
     const badges = [...view.dom.querySelectorAll(".cm-line .cm-agent-badge")];
-    expect(badges.map((badge) => badge.closest(".cm-line")?.firstChild?.textContent)).toEqual([
+    expect(badges.map((badge) => sourceText(badge.closest(".cm-line")))).toEqual([
       'kick: s("bd*4")',
     ]);
     view.destroy();
@@ -414,7 +423,7 @@ describe("over the visuals", () => {
   const source =
     'kick: s("bd*4")\n// the hats\nhats: s("hh*8")\n  .gain(.6)\nviz: hydra`osc().out()`';
   const lineTexts = (view: EditorView, selector: string) =>
-    [...view.dom.querySelectorAll(selector)].map((line) => line.firstChild?.textContent ?? "");
+    [...view.dom.querySelectorAll(selector)].map(sourceText);
   const banded = (view: EditorView) => lineTexts(view, ".cm-line.cm-focus-line");
   const turn = (state: TurnView["state"], aim: string | null): TurnView => ({
     instruction: "make it busier",
@@ -546,7 +555,7 @@ describe("over the visuals", () => {
     const { view } = mounted(source, 0);
     const badges = () =>
       [...view.dom.querySelectorAll(".cm-error-badge")].map((badge) => [
-        badge.closest(".cm-line")?.firstChild?.textContent,
+        sourceText(badge.closest(".cm-line")),
         badge.textContent,
       ]);
 
@@ -557,6 +566,86 @@ describe("over the visuals", () => {
 
     view.dispatch({ effects: showVisualError.of(undefined) });
     expect(badges()).toEqual([]);
+    view.destroy();
+  });
+});
+
+describe("syntax highlighting", () => {
+  const source = [
+    'kick: s("bd*2 ~").gain(.8)',
+    "_hats: s('hh')",
+    'viz: hydra`osc(10).color("red").scale(pulse("kick")).out()`',
+  ].join("\n");
+  const colourOf = (view: EditorView, selector: string, text: string) => {
+    const span = [...view.dom.querySelectorAll(selector)].find((el) => el.textContent === text);
+    if (span === undefined) throw new Error(`no ${selector} reading ${text}`);
+    return getComputedStyle(span).color;
+  };
+
+  test("colours labels, keywords, functions, Mini-notation, strings and link helpers apart", () => {
+    const { view } = mounted(`const x = 1\n${source}`);
+    const fg = getComputedStyle(view.contentDOM).color;
+
+    const colours = [
+      colourOf(view, ".cm-t-label", "kick"),
+      colourOf(view, ".cm-t-keyword", "const"),
+      colourOf(view, ".cm-t-function", "osc"),
+      colourOf(view, ".cm-t-mini-word", "bd"),
+      colourOf(view, ".cm-t-mini-structure", "*"),
+      colourOf(view, ".cm-t-mini-rest", "~"),
+      colourOf(view, ".cm-t-string", '"red"'),
+      colourOf(view, ".cm-link-helper", "pulse"),
+    ];
+    expect(new Set([...colours, fg]).size).toBe(colours.length + 1);
+    view.destroy();
+  });
+
+  test("dims a muted Part's body but not its label", () => {
+    const { view } = mounted(source);
+    const opacityOf = (text: string) => {
+      const span = [...view.contentDOM.querySelectorAll("span")].find(
+        (el) => el.textContent === text,
+      );
+      if (span === undefined) throw new Error(`no span reading ${text}`);
+      return Number(getComputedStyle(span).opacity);
+    };
+
+    expect(opacityOf("_hats")).toBe(1);
+    expect(opacityOf("'hh'")).toBeLessThan(1);
+    expect(opacityOf("kick")).toBe(1);
+    view.destroy();
+  });
+
+  test("colours the agent's draft, ghost and Proposal like the Source", () => {
+    const { view } = mounted(source);
+    const part = (id: string): PartView => ({
+      id,
+      muted: false,
+      soloed: false,
+      surface: "audio",
+      unapplied: false,
+      deleted: false,
+    });
+
+    view.dispatch({
+      effects: [
+        showAgentWork.of({
+          turn: undefined,
+          draft: [{ part: "kick", text: 'kick: s("sd")' }],
+          parts: [part("kick"), { ...part("bass"), deleted: true, live: 'bass: note("c2")' }],
+        }),
+        showProposal.of({
+          changes: [{ part: "kick", text: 'kick: s("cp")', added: false }],
+          stale: false,
+        }),
+      ],
+    });
+
+    const words = (block: string) =>
+      [...view.dom.querySelectorAll(`${block} .cm-t-mini-word`)].map((el) => el.textContent);
+    expect(words(".cm-draft")).toEqual(["sd"]);
+    expect(words(".cm-ghost")).toEqual(["c2"]);
+    expect(words(".cm-proposal-new")).toEqual(["cp"]);
     view.destroy();
   });
 });

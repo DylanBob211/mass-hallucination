@@ -8,6 +8,7 @@ import {
   type TurnView,
   turnEndings,
 } from "../facade/facade";
+import { highlightedText } from "./highlight";
 import { blockPlace, labelLine } from "./place";
 
 /** What the editor shows of the agent's work, from the view model. */
@@ -115,14 +116,14 @@ class Block extends WidgetType {
   override toDOM() {
     const block = document.createElement("pre");
     block.className = this.className;
-    block.textContent = this.text;
+    block.replaceChildren(highlightedText(this.text));
     return block;
   }
 
   /** The draft grows with every delta; its block is kept and only its text replaced. */
   override updateDOM(dom: HTMLElement) {
     if (!dom.classList.contains(this.className)) return false;
-    dom.textContent = this.text;
+    dom.replaceChildren(highlightedText(this.text));
     return true;
   }
 }

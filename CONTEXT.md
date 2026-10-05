@@ -33,6 +33,12 @@ another Part's events or values, or another Part's loudness); nothing outside th
 link.
 _Avoid_: Visualiser, scene, shader, sketch
 
+**Mini-notation**:
+The compact rhythm language inside strings of the Source outside Visual Parts — names, rests, groupings and
+repetitions in one line (`"bd*2 [~ sd]"`). Which strings are Mini-notation is decided by how
+they are quoted, not by where they appear, so a string meant literally can be read as rhythm.
+_Avoid_: Pattern string, mini, notation
+
 **Transport**:
 Whether a Performance is running, and at what tempo. Excludes position within the cycle, which is machinery rather than something the agent perceives.
 _Avoid_: Clock, playback state

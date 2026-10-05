@@ -43,11 +43,17 @@ export const agentWriteEvent = "agent.write";
  */
 export const locateUnits = (
   source: string,
-): Array<{ readonly id: string; readonly from: number; readonly to: number }> =>
+): Array<{
+  readonly id: string;
+  readonly from: number;
+  readonly to: number;
+  readonly muted: boolean;
+}> =>
   locate(source).map(({ from, to, ...unit }) => ({
     id: "part" in unit ? unit.part.id : preambleId,
     from,
     to,
+    muted: "part" in unit && unit.part.muted,
   }));
 
 /** The only place Effect meets the UI (ADR 0006): plain calls in, one view model out. */

@@ -5,6 +5,7 @@ import { EditorView, drawSelection, type KeyBinding, keymap } from "@codemirror/
 import type { Autonomy } from "../facade/facade";
 import { agentMarks } from "./agentMarks";
 import { agentWork } from "./agentWork";
+import { sourceHighlighting } from "./highlight";
 import { type InstructionCommands, instructionInput } from "./instruction";
 import { overVisuals } from "./overVisuals";
 import { proposalDiff, type ProposalCommands } from "./proposal";
@@ -147,6 +148,7 @@ export const createEditor = (source: string, commands: EditorCommands): EditorVi
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       javascript(),
+      sourceHighlighting,
       proposalDiff(commands),
       agentWork,
       agentMarks,
