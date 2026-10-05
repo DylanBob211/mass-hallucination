@@ -11,8 +11,13 @@ if (!target) throw new Error("#app is missing from index.html");
 
 const peek = new PeekState();
 const codeView = new CodeViewState();
+// The Preamble every Performance starts from: a sample bank and a tempo.
+const seed = `samples('github:tidalcycles/dirt-samples')
+setcpm(120/4)
+
+`;
 // The keys reach the façade only once it exists, which needs the view first.
-const view = createEditor("", {
+const view = createEditor(seed, {
   apply: () => void facade.apply(),
   stopTransport: () => void facade.stopTransport(),
   setAutonomy: (autonomy) => void facade.setAutonomy(autonomy),
