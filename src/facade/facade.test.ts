@@ -165,7 +165,7 @@ describe("façade", () => {
 
     expect(page.downloads).toHaveLength(1);
     const [{ name, text }] = page.downloads as [{ name: string; text: string }];
-    expect(name).toMatch(/^pair-formance-log-.+\.json$/);
+    expect(name).toMatch(/^mass-hallucination-log-.+\.json$/);
     const log = JSON.parse(text) as Record<string, unknown>;
     expect(log["turns"]).toMatchObject([
       { instruction: "make the hats busier", aim: "hats", ending: "stopped", calls: 1 },

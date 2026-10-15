@@ -1,4 +1,4 @@
-# pair-formance
+# Mass Hallucination
 
 ## Agent skills
 

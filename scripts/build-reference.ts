@@ -16,7 +16,7 @@ import { lockedVersions, versionsLine } from "./reference/versions.ts";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const out = join(root, "src/reference");
 // Not under node_modules: Strudel's jsdoc config skips every path that contains it.
-const cache = join(tmpdir(), "pair-formance-build-reference");
+const cache = join(tmpdir(), "mass-hallucination-build-reference");
 const checkout = join(cache, "strudel");
 const tools = join(cache, "tools");
 

@@ -1,4 +1,4 @@
-# pair-formance
+# Mass Hallucination
 
 A browser live-coding environment where a human codes music and visuals, and an AI pair-programmer inspects and modifies the live-coding state alongside them.
 
