@@ -73,6 +73,14 @@ _Avoid_: Version, revision number, etag
 **Muted / soloed**:
 Conditions of a Part, read from its label rather than held anywhere. A Part is muted or soloed only because its Source says so. A muted Visual Part is not drawn. Soloing works within one Surface: soloing an Audio Part silences the other Audio Parts and leaves the Visual Parts showing, and the other way round.
 
+### What the agent pursues
+
+**Brief**:
+The human's standing intent for a Performance, open-ended on purpose: what the agent interprets and
+pursues, on its own initiative, for as long as it runs. Unlike an Instruction it does not end when
+a change lands; the agent builds on it rather than completing it.
+_Avoid_: Goal, prompt, theme, mission, first prompt
+
 ### How the agent's changes land
 
 **Autonomy**:
