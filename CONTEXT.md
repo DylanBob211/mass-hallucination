@@ -50,7 +50,8 @@ The text of a Part as of the last successful evaluation — what is actually run
 _Avoid_: Active code, compiled code, sounding code
 
 **Unapplied edits**:
-The condition of a Part whose text has diverged from its Live code: written but not yet running. A normal state, not a fault.
+The condition of a Part whose code has diverged from its Live code: written but not yet running. A
+change of Layout alone is never Unapplied edits. A normal state, not a fault.
 _Avoid_: Dirty, staged, pending, uncommitted
 
 **Apply**:
@@ -66,9 +67,21 @@ how one voice changes while the rest keep sounding exactly as they are.
 _Avoid_: Selection, target, range
 
 **Rev**:
-A short fingerprint of a Part's exact current text, by which an agent states which text it read.
-Derived from the Source, never stored: the same text always has the same Rev.
+A short fingerprint of a Part's current code, by which an agent states which code it read.
+Derived from the Source, never stored: the same code always has the same Rev, in any Layout.
 _Avoid_: Version, revision number, etag
+
+**Layout**:
+Everything about a Part's text that leaves the structure of its code unchanged: where its lines
+break, how far they are indented, optional semicolons and parentheses, how a number is spelled.
+Changing the Layout never changes what is heard or drawn, a Rev, or whether a Part has Unapplied
+edits. A string exactly as quoted, and a comment, are code, never Layout.
+_Avoid_: Formatting, style, whitespace
+
+**Format**:
+The human's act of rewriting the Layout of the whole Source at once, leaving its code as it is. A
+Format is an edit like any other, but never makes a Proposal Stale or a Part need an Apply.
+_Avoid_: Prettify, beautify, tidy, lint
 
 **Muted / soloed**:
 Conditions of a Part, read from its label rather than held anywhere. A Part is muted or soloed only because its Source says so. A muted Visual Part is not drawn. Soloing works within one Surface: soloing an Audio Part silences the other Audio Parts and leaves the Visual Parts showing, and the other way round.
