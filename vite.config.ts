@@ -20,7 +20,16 @@ export default defineConfig(({ mode }) => ({
           name: "node",
           environment: "node",
           include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
-          exclude: ["src/**/*.browser.test.ts"],
+          exclude: ["src/**/*.browser.test.ts", "src/**/*.real.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        // Against the real API, and billed: only `pnpm test:real` runs these, never `pnpm check`.
+        test: {
+          name: "real",
+          environment: "node",
+          include: ["src/**/*.real.test.ts"],
         },
       },
       {

@@ -16,9 +16,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
+    "test": "vitest run --project node --project browser",
     "test:node": "vitest run --project node",
     "test:browser": "vitest run --project browser",
+    "test:real": "vitest run --project real",
     "check": "pnpm check:reference && pnpm typecheck && pnpm check:svelte && pnpm lint && pnpm format:check && pnpm test"
   },
   "dependencies": {

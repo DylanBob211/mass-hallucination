@@ -14,8 +14,8 @@ import { takeSnapshot } from "../../core/snapshot";
 import { anthropicModel, type ModelConfig, modelConfigFromEnv } from "./model";
 
 /**
- * Against the real API, and billed: runs only with a key, the app's from `.env.local` or else
- * `ANTHROPIC_API_KEY`, e.g. `pnpm vitest run --project node src/facade/live/model.real.test.ts`.
+ * Against the real API, and billed: runs only under `pnpm test:real`, never `pnpm check`, and only
+ * with a key, the app's from `.env.local` or else `ANTHROPIC_API_KEY`.
  * `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` override the app's configuration. The dry-run is
  * faked, so this checks the model and the loop, not Strudel.
  */

@@ -249,5 +249,8 @@ export const downloadLog = Effect.gen(function* () {
   const now = yield* DateTime.now;
   // A name that sorts by time and is safe on every filesystem.
   const stamp = DateTime.formatIso(now).replace(/[:.]/g, "-");
-  yield* (yield* Page).download(`mass-hallucination-log-${stamp}.json`, JSON.stringify(log, null, 2));
+  yield* (yield* Page).download(
+    `mass-hallucination-log-${stamp}.json`,
+    JSON.stringify(log, null, 2),
+  );
 });

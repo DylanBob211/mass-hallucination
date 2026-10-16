@@ -7,7 +7,7 @@ import ts from "typescript-eslint";
 import svelteConfig from "./svelte.config.js";
 
 export default defineConfig(
-  { ignores: ["dist/", "coverage/", ".svelte-check/", ".scratch/", ".claude/"] },
+  { ignores: ["dist/", "coverage/", ".svelte-check/", ".scratch/", ".claude/", "learn/"] },
   js.configs.recommended,
   ts.configs.strictTypeChecked,
   svelte.configs.recommended,
@@ -23,6 +23,16 @@ export default defineConfig(
         extraFileExtensions: [".svelte"],
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    // CODING_STANDARDS.md: a switch over a union names every member, so a new member breaks the
+    // lint until each switch decides what to do with it.
+    rules: {
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        { considerDefaultExhaustiveForUnions: false, requireDefaultForNonUnion: false },
+      ],
     },
   },
   {
