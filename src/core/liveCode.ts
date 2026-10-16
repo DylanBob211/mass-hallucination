@@ -48,18 +48,21 @@ export interface Composition {
  * still sounding. Never written back.
  */
 export const compose = (performance: Performance, live: LiveCode, scope: Scope): Composition => {
-  const preambleInPlace = inScope(scope, preambleId) || live.preamble === performance.preamble.text;
+  const preambleInPlace =
+    inScope(scope, preambleId) || sameCode(performance.preamble.text, live.preamble);
   // Out of Scope and diverged, the Preamble's Live code is one text with no place between Parts;
   // it goes first, where helpers must be defined before the Parts that use them.
   const units: Array<[string, string | undefined]> = preambleInPlace
     ? []
     : [[preambleId, live.preamble]];
-  for (const segment of performance.layout) {
+  for (const segment of performance.segments) {
     if ("preamble" in segment) {
       if (preambleInPlace) units.push([preambleId, segment.preamble]);
     } else {
       const { id, text } = segment.part;
-      units.push([id, inScope(scope, id) ? text : live.parts.get(id)]);
+      const running = live.parts.get(id);
+      // Text whose Layout alone changed plays as written, so what plays is what the Source shows.
+      units.push([id, inScope(scope, id) || sameCode(text, running) ? text : running]);
     }
   }
   if (scope !== "every") units.push(...deleted(performance, live));
@@ -97,19 +100,27 @@ export const deleted = (performance: Performance, live: LiveCode): Array<[string
   [...live.parts].filter(([id]) => !performance.parts.some((part) => part.id === id));
 
 /**
- * Whether each of `written`, keyed as in `withTexts`, is still its unit's text in `performance`:
- * the human has neither edited, undone nor deleted it.
+ * Whether each of `written`, keyed as in `withTexts`, is still its unit's code in `performance`:
+ * the human has neither edited, undone nor deleted it, though they may have changed its Layout.
  */
 export const holds = (performance: Performance, written: ReadonlyMap<string, string>): boolean =>
-  [...written].every(([id, text]) =>
-    id === preambleId
-      ? performance.preamble.text === text.trim()
-      : performance.parts.find((part) => part.id === id)?.text === text,
-  );
+  [...written].every(([id, text]) => {
+    const unit =
+      id === preambleId ? performance.preamble : performance.parts.find((part) => part.id === id);
+    return unit !== undefined && sameCode(unit.text, id === preambleId ? text.trim() : text);
+  });
 
-/** Written but not yet running (CONTEXT.md): its current text is not its Live code. */
+/** Written but not yet running (CONTEXT.md): its current code is not its Live code. */
 export const isUnapplied = (part: Part, live: LiveCode): boolean =>
-  live.parts.get(part.id) !== part.text;
+  !sameCode(part.text, live.parts.get(part.id));
+
+/** Whether the Preamble's current code is not its Live code. */
+export const isPreambleUnapplied = (performance: Performance, live: LiveCode): boolean =>
+  !sameCode(performance.preamble.text, live.preamble);
+
+/** Whether two texts are the same code, in whatever Layout (ADR 0008). */
+export const sameCode = (text: string, other: string | undefined): boolean =>
+  other !== undefined && (text === other || revOf(text) === revOf(other));
 
 /**
  * The Performance once `texts` are written, each keyed by a Part's identity or by `preambleId`: a
@@ -122,29 +133,29 @@ export const withTexts = (
   texts: ReadonlyMap<string, string>,
 ): Performance => {
   const preamble = texts.get(preambleId);
-  const layout: Array<Segment> = [];
+  const segments: Array<Segment> = [];
   let preamblePlaced = preamble === undefined;
-  for (const segment of performance.layout) {
+  for (const segment of performance.segments) {
     if ("part" in segment) {
       const text = texts.get(segment.part.id);
-      layout.push(text === undefined ? segment : { part: partOf(segment.part.id, text) });
+      segments.push(text === undefined ? segment : { part: partOf(segment.part.id, text) });
     } else if (preamble === undefined) {
-      layout.push(segment);
+      segments.push(segment);
     } else if (!preamblePlaced) {
       preamblePlaced = true;
-      if (preamble.trim() !== "") layout.push({ preamble: preamble.trim() });
+      if (preamble.trim() !== "") segments.push({ preamble: preamble.trim() });
     }
   }
   if (preamble !== undefined && !preamblePlaced && preamble.trim() !== "")
-    layout.unshift({ preamble: preamble.trim() });
+    segments.unshift({ preamble: preamble.trim() });
   for (const [id, text] of texts)
     if (id !== preambleId && !performance.parts.some((part) => part.id === id))
-      layout.push({ part: partOf(id, text) });
-  const parts = layout.flatMap((segment) => ("part" in segment ? [segment.part] : []));
-  const preambleText = layout
+      segments.push({ part: partOf(id, text) });
+  const parts = segments.flatMap((segment) => ("part" in segment ? [segment.part] : []));
+  const preambleText = segments
     .flatMap((segment) => ("preamble" in segment ? [segment.preamble] : []))
     .join("\n");
-  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, layout };
+  return { parts, preamble: { text: preambleText, rev: revOf(preambleText) }, segments };
 };
 
 /**
@@ -173,16 +184,16 @@ export const writeTexts = (
   source: string,
   texts: ReadonlyMap<string, string>,
 ): ReadonlyArray<TextChange> => {
-  const expected = layoutOf(withTexts(parsePerformance(source), texts));
+  const expected = segmentsOf(withTexts(parsePerformance(source), texts));
   const tight = writeTextsWith(source, texts, "");
-  return layoutOf(parsePerformance(applyChanges(source, tight))) === expected
+  return segmentsOf(parsePerformance(applyChanges(source, tight))) === expected
     ? tight
     : writeTextsWith(source, texts, "\n");
 };
 
-const layoutOf = ({ layout }: Performance) =>
+const segmentsOf = ({ segments }: Performance) =>
   JSON.stringify(
-    layout.map((segment) =>
+    segments.map((segment) =>
       "part" in segment ? [segment.part.id, segment.part.text] : segment.preamble,
     ),
   );

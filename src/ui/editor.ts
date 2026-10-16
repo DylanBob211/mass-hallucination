@@ -5,6 +5,7 @@ import { EditorView, drawSelection, type KeyBinding, keymap } from "@codemirror/
 import type { Autonomy } from "../facade/facade";
 import { agentMarks } from "./agentMarks";
 import { agentWork } from "./agentWork";
+import { type FormatCommands, formatKey } from "./format";
 import { sourceHighlighting } from "./highlight";
 import { type InstructionCommands, instructionInput } from "./instruction";
 import { overVisuals } from "./overVisuals";
@@ -34,7 +35,7 @@ const theme = EditorView.theme(
 );
 
 /** What the performer's keys ask of the Performance (spec §10). */
-export interface EditorCommands extends ProposalCommands, InstructionCommands {
+export interface EditorCommands extends ProposalCommands, InstructionCommands, FormatCommands {
   apply(): void;
   stopTransport(): void;
   setAutonomy(autonomy: Autonomy): void;
@@ -67,10 +68,10 @@ const proposalKeys: ReadonlyArray<[string, keyof ProposalCommands]> = [
  * Ctrl, not Mod, as spec §10 says, and ahead of the default keymap, whose Mod-Enter would insert a
  * line. Focus stays in the editor.
  */
-const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyArray<KeyBinding>) =>
+const performanceKeymap = (commands: EditorCommands, extraKeys: ReadonlyArray<KeyBinding>) =>
   Prec.high(
     keymap.of([
-      ...instructionKeys,
+      ...extraKeys,
       {
         key: "Escape",
         // Esc closes an open peek first, so dismissing it never stops a Turn. Either way it keeps
@@ -139,11 +140,13 @@ const performanceKeymap = (commands: EditorCommands, instructionKeys: ReadonlyAr
  */
 export const createEditor = (source: string, commands: EditorCommands): EditorView => {
   const instruction = instructionInput(commands);
+  const format = formatKey(commands);
   return new EditorView({
     doc: source,
     extensions: [
-      performanceKeymap(commands, instruction.keys),
+      performanceKeymap(commands, [...instruction.keys, format.key]),
       instruction.extension,
+      format.extension,
       history(),
       drawSelection(),
       keymap.of([...defaultKeymap, ...historyKeymap]),

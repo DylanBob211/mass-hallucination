@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { Editor } from "./Editor";
 import { ErrorSlotStore } from "./ErrorSlotStore";
-import { deleted, isUnapplied, type LiveCode, preambleId } from "./liveCode";
+import { deleted, isPreambleUnapplied, isUnapplied, type LiveCode, preambleId } from "./liveCode";
 import { LiveCodeStore, outputsOf, type VisualOutputs } from "./LiveCodeStore";
 import { type Performance, parsePerformance, type Surface } from "./Performance";
 import { Strudel } from "./Strudel";
@@ -55,7 +55,7 @@ export const snapshotOf = ({
   const { preamble } = performance;
   // An empty Preamble is shown only while text it no longer has still plays.
   if (preamble.text !== "" || (live.preamble ?? "") !== "") {
-    const unapplied = live.preamble !== preamble.text;
+    const unapplied = isPreambleUnapplied(performance, live);
     parts.push({
       part: preambleId,
       rev: preamble.rev,

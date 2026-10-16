@@ -75,7 +75,8 @@ _Avoid_: Version, revision number, etag
 Everything about a Part's text that leaves the structure of its code unchanged: where its lines
 break, how far they are indented, optional semicolons and parentheses, how a number is spelled.
 Changing the Layout never changes what is heard or drawn, a Rev, or whether a Part has Unapplied
-edits. A string exactly as quoted, and a comment, are code, never Layout.
+edits. A string exactly as quoted, and a comment, are code, never Layout; but a Visual Part's
+code keeps a Layout of its own, though it is written inside a string.
 _Avoid_: Formatting, style, whitespace
 
 **Format**:

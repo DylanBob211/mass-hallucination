@@ -23,6 +23,7 @@ const mounted = (source: string, cursor = 0) => {
     closePeek: vi.fn(() => false),
     downloadLog: vi.fn(),
     cycleCodeView: vi.fn(),
+    showFormatRefusal: vi.fn(),
   };
   const view = createEditor(source, commands);
   document.body.append(view.dom);
@@ -92,6 +93,46 @@ test("Alt-A, Alt-P and Alt-R accept, accept & play and reject the Proposal", asy
   expect(commands.reject).toHaveBeenCalledOnce();
   expect(view.state.doc.toString()).toBe('s("bd")');
   view.destroy();
+});
+
+describe("a Format", () => {
+  const long = `kick: s("bd*4").bank('RolandTR909').gain(.9).room(0.3).lpf(sine.range(200,2000).slow(4))`;
+
+  test("Shift-Alt-F lays out the Source, the cursor kept on its code, as one undo step", async () => {
+    const { view } = mounted(long, long.indexOf("room"));
+
+    await userEvent.keyboard("{Shift>}{Alt>}F{/Alt}{/Shift}");
+
+    const formatted = `kick: s("bd*4")
+  .bank('RolandTR909')
+  .gain(0.9)
+  .room(0.3)
+  .lpf(sine.range(200, 2000).slow(4))
+`;
+    await expect.poll(() => view.state.doc.toString()).toBe(formatted);
+    expect(view.state.selection.main.head).toBe(formatted.indexOf("room"));
+    expect(view.hasFocus).toBe(true);
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(view.state.doc.toString()).toBe(long);
+    view.destroy();
+  });
+
+  test("a refused Format leaves the Source as it is, and says why until the next edit", async () => {
+    const { view, commands } = mounted('kick: s("bd*4").gain(');
+
+    await userEvent.keyboard("{Shift>}{Alt>}F{/Alt}{/Shift}");
+
+    await expect
+      .poll(() => commands.showFormatRefusal.mock.calls)
+      .toEqual([["syntax error at line 1"]]);
+    expect(view.state.doc.toString()).toBe('kick: s("bd*4").gain(');
+    await userEvent.keyboard("1");
+    expect(commands.showFormatRefusal.mock.calls).toEqual([
+      ["syntax error at line 1"],
+      [undefined],
+    ]);
+    view.destroy();
+  });
 });
 
 describe("a Proposal", () => {

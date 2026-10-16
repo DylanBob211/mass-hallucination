@@ -23,6 +23,7 @@ const mounted = () => {
     closePeek: () => false,
     downloadLog: () => {},
     cycleCodeView: () => {},
+    showFormatRefusal: () => {},
   });
   document.body.append(view.dom);
   view.focus();

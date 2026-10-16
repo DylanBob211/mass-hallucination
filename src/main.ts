@@ -4,6 +4,7 @@ import "./app.css";
 import { createLiveFacade } from "./facade/live";
 import { CodeViewState } from "./ui/codeView.svelte";
 import { createEditor } from "./ui/editor";
+import { FormatRefusalState } from "./ui/formatRefusal.svelte";
 import { PeekState } from "./ui/peekState.svelte";
 
 const target = document.getElementById("app");
@@ -11,6 +12,7 @@ if (!target) throw new Error("#app is missing from index.html");
 
 const peek = new PeekState();
 const codeView = new CodeViewState();
+const formatRefusal = new FormatRefusalState();
 // The Preamble every Performance starts from: a sample bank and a tempo.
 const seed = `samples('github:tidalcycles/dirt-samples')
 setcpm(120/4)
@@ -34,13 +36,16 @@ const view = createEditor(seed, {
   cycleCodeView: () => {
     codeView.cycle();
   },
+  showFormatRefusal: (reason) => {
+    formatRefusal.reason = reason;
+  },
 });
 const facade = createLiveFacade(view);
 // The peek opens itself on a word answer (ADR 0007), whether or not anything renders it.
 const seeTurns = facade.subscribe(({ turns }) => {
   peek.see(turns);
 });
-const app = mount(App, { target, props: { facade, view, peek, codeView } });
+const app = mount(App, { target, props: { facade, view, peek, codeView, formatRefusal } });
 
 import.meta.hot?.dispose(() => {
   void unmount(app)

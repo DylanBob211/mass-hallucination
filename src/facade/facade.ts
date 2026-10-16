@@ -5,6 +5,7 @@ import { apply, stopTransport } from "../core/apply";
 import { AutonomyStore } from "../core/AutonomyStore";
 import type { Editor } from "../core/Editor";
 import { ErrorSlotStore } from "../core/ErrorSlotStore";
+import { type Formatted, formatSource } from "../core/format";
 import { downloadLog, Instrumentation } from "../core/Instrumentation";
 import { preambleId, type Scope } from "../core/liveCode";
 import { LiveCodeStore } from "../core/LiveCodeStore";
@@ -29,6 +30,7 @@ export type {
 } from "../core/viewModel";
 export { turnEndings } from "../core/viewModel";
 export type { Surface } from "../core/Performance";
+export type { Formatted } from "../core/format";
 export { preambleId, type Scope } from "../core/liveCode";
 
 /**
@@ -55,6 +57,13 @@ export const locateUnits = (
     to,
     muted: "part" in unit && unit.part.muted,
   }));
+
+/**
+ * A Format of `source` (CONTEXT.md): its Layout rewritten, with `cursor` kept on its code, or why
+ * it was refused. Pure, for the editor's Shift-Alt-F.
+ */
+export const format = (source: string, cursor: number): Promise<Formatted> =>
+  Effect.runPromise(formatSource(source, cursor));
 
 /** The only place Effect meets the UI (ADR 0006): plain calls in, one view model out. */
 export interface Facade {

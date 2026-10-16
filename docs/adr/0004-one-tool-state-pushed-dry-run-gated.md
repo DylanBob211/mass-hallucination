@@ -30,6 +30,9 @@ keeps ADR 0001 intact. It is how a request states "the text I read" (ADR 0003) w
 text: the check is the same, and the output tokens are far fewer. A human who edits a Part and types
 it back exactly restores its rev, and a request against it rightly succeeds.
 
+**Amended by ADR 0008:** the rev is now a SHA-256 of a Part's code, not its exact text, so a change
+of Layout alone (a Format) keeps it.
+
 ## The tool
 
 ```ts

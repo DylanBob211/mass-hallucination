@@ -4,6 +4,7 @@
   import type { Facade } from "./facade/facade";
   import { type CodeViewState, shownCodeView, visualErrorOf } from "./ui/codeView.svelte";
   import Editor from "./ui/Editor.svelte";
+  import type { FormatRefusalState } from "./ui/formatRefusal.svelte";
   import Peek from "./ui/Peek.svelte";
   import type { PeekState } from "./ui/peekState.svelte";
   import StatusLine from "./ui/StatusLine.svelte";
@@ -13,7 +14,14 @@
     view,
     peek,
     codeView,
-  }: { facade: Facade; view: EditorView; peek: PeekState; codeView: CodeViewState } = $props();
+    formatRefusal,
+  }: {
+    facade: Facade;
+    view: EditorView;
+    peek: PeekState;
+    codeView: CodeViewState;
+    formatRefusal: FormatRefusalState;
+  } = $props();
 
   // The façade's view model is immutable and replaced whole on each update (ADR 0006), so it is
   // read as-is rather than copied into deep state.
@@ -50,6 +58,6 @@
   </div>
   <div class="relative">
     <Peek {peek} turns={viewModel.turns} downloadLog={() => void facade.downloadLog()} />
-    <StatusLine {viewModel} codeView={shown} />
+    <StatusLine {viewModel} codeView={shown} formatRefusal={formatRefusal.reason} />
   </div>
 </main>

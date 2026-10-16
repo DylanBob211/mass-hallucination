@@ -36,6 +36,7 @@
     "acorn-loose": "8.5.2",
     "effect": "3.22.2",
     "hydra-synth": "1.4.0",
+    "prettier": "3.9.9",
     "svelte": "5.57.1"
   },
   "devDependencies": {
@@ -52,7 +53,6 @@
     "eslint-plugin-svelte": "3.23.0",
     "globals": "17.12.0",
     "playwright": "1.63.0",
-    "prettier": "3.9.9",
     "prettier-plugin-svelte": "4.1.1",
     "prettier-plugin-tailwindcss": "0.8.1",
     "svelte-check": "4.7.6",

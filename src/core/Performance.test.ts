@@ -163,24 +163,65 @@ d: x.hydra\`osc().out()\``),
   });
 
   describe("Rev", () => {
-    // Expected values from `printf '%s' '<text>' | sha256sum | cut -c1-8`.
-    it("is the first 8 hex chars of SHA-256 over the Part's exact text", () => {
-      expect(parsePerformance('kick: s("bd*4")').parts[0]?.rev).toBe("db1f1263");
-      expect(parsePerformance('hats: s("é")').parts[0]?.rev).toBe("4baef81f");
+    const revOfPart = (text: string) => parsePerformance(text).parts[0]?.rev;
+
+    it("is the same for the same code in any Layout", () => {
+      expect(
+        revOfPart(`drums: s("bd*2").bank('RolandTR909').gain(.8).sometimes(x=>x.fast(2))`),
+      ).toBe(
+        revOfPart(`drums: s("bd*2")
+  .bank('RolandTR909')
+  .gain(0.8)
+  .sometimes((x) => x.fast(2));`),
+      );
+      expect(revOfPart("viz: osc(1).rotate(() => a && b || c)")).toBe(
+        revOfPart("viz: osc(1).rotate(() => (a && b) || c)"),
+      );
+    });
+
+    it("tells strings apart by their quotes, which decide what is Mini-notation", () => {
+      expect(revOfPart(`x: s("bd").bank('a')`)).not.toBe(revOfPart(`x: s("bd").bank("a")`));
+      expect(revOfPart('x: s("bd  sd")')).not.toBe(revOfPart('x: s("bd sd")'));
+    });
+
+    it("tells apart a change of comment", () => {
+      expect(revOfPart('// loud\nkick: s("bd")')).not.toBe(revOfPart('// soft\nkick: s("bd")'));
+    });
+
+    it("is the same for the same Visual Part code in any Layout", () => {
+      expect(revOfPart("viz: hydra`osc(10).rotate(0.5).out()`")).toBe(
+        revOfPart("viz: hydra`\n  osc(10)\n    .rotate(.5)\n    .out()\n`"),
+      );
+      expect(revOfPart("viz: hydra`osc(10).out()`")).not.toBe(
+        revOfPart("viz: hydra`osc(20).out()`"),
+      );
+    });
+
+    it("is of the exact text while the Part does not parse", () => {
+      expect(revOfPart('kick: s("bd").gain(')).not.toBe(revOfPart('kick: s("bd") .gain('));
+    });
+
+    it("is 8 hex chars", () => {
+      expect(revOfPart('hats: s("é")')).toMatch(/^[0-9a-f]{8}$/);
     });
 
     it("covers the Part's leading comments", () => {
-      const source = '// four on the floor\nkick: s("bd*4")';
-      expect(parsePerformance(source).parts[0]?.rev).toBe("21d85891");
+      expect(revOfPart('// four on the floor\nkick: s("bd*4")')).not.toBe(
+        revOfPart('kick: s("bd*4")'),
+      );
     });
 
     it("does not change when the text around the Part does", () => {
-      const source = 'setcps(0.5)\n\n\nkick: s("bd*4")\n\n';
-      expect(parsePerformance(source).parts[0]?.rev).toBe("db1f1263");
+      expect(revOfPart('setcps(0.5)\n\n\nkick: s("bd*4")\n\n')).toBe(revOfPart('kick: s("bd*4")'));
     });
 
-    it("is given to the Preamble too", () => {
-      expect(parsePerformance(seed).preamble.rev).toBe("a34eaa21");
+    it("is given to the Preamble too, blind to its Layout", () => {
+      expect(parsePerformance(seed).preamble.rev).toBe(
+        parsePerformance("samples('github:tidalcycles/dirt-samples');setcps(0.5)").preamble.rev,
+      );
+      expect(parsePerformance(seed).preamble.rev).not.toBe(
+        parsePerformance("setcps(0.5)").preamble.rev,
+      );
     });
   });
 

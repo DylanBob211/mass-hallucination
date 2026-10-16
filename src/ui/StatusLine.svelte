@@ -2,7 +2,11 @@
   import { turnEndings, type ViewModel } from "../facade/facade";
   import type { CodeView } from "./codeView.svelte";
 
-  let { viewModel, codeView }: { viewModel: ViewModel; codeView: CodeView } = $props();
+  let {
+    viewModel,
+    codeView,
+    formatRefusal,
+  }: { viewModel: ViewModel; codeView: CodeView; formatRefusal: string | undefined } = $props();
 
   const transport = $derived(viewModel.transport);
   const error = $derived(viewModel.error);
@@ -56,6 +60,11 @@
   {#if error}
     <span class="min-w-0 truncate text-error" title={error.message}>
       ✕ {error.phase === "eval" ? "eval" : "playing"}{error.part ? ` in ${error.part}` : ""}: {error.message}
+    </span>
+  {/if}
+  {#if formatRefusal}
+    <span class="shrink-0 text-error" title="Shift-Alt-F: Format the Source">
+      ✕ not formatted: {formatRefusal}
     </span>
   {/if}
   {#if codeView !== "all"}

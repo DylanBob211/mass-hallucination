@@ -1,5 +1,5 @@
 import type { ChangePartsResult } from "./changeParts";
-import { isUnapplied, type LiveCode, preambleId } from "./liveCode";
+import { isPreambleUnapplied, isUnapplied, type LiveCode, preambleId } from "./liveCode";
 import type { Performance } from "./Performance";
 
 /** One Part's change in a `change_parts` request: its whole new text, and the rev it replaces. */
@@ -43,7 +43,7 @@ export const refusalOf = (
   for (const { part } of changes) {
     const unapplied =
       part === preambleId
-        ? live.preamble !== performance.preamble.text
+        ? isPreambleUnapplied(performance, live)
         : performance.parts.some((p) => p.id === part && isUnapplied(p, live)) ||
           // A new Part on a deleted one still sounding would undo the human's deletion.
           (!performance.parts.some((p) => p.id === part) && live.parts.has(part));

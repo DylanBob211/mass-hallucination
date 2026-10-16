@@ -293,6 +293,7 @@ Normative: [ADR 0007](../../docs/adr/0007-instructions-at-the-cursor-state-in-on
 | Alt-1 / 2 / 3 | Autonomy Propose / Write / Apply |
 | Ctrl-J | toggle the peek (never takes focus) |
 | Alt-H | all code → Part in focus only → no code → all |
+| Shift-Alt-F | Format the whole Source: Layout only, one undo step (ADR 0008) |
 
 - **While the agent works:** the tool input streams as a dashed block under its Part (new Parts at
   the end); an "agent at work" badge on the label line; the status line shows the note.

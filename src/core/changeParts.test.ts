@@ -687,4 +687,72 @@ bass: s("bd")`,
       );
     });
   });
+
+  describe("after the human changes only the Layout of a Part", () => {
+    const busier = 'hats: s("hh*16").swingBy(1/3, 4).gain(.6)';
+    const formatted = (source: string) => source.replace(hats, 'hats: s("hh*8")\n  .gain(0.6)');
+
+    it.scoped("lands a change made on the Rev read before it", () =>
+      Effect.gen(function* () {
+        const { editor, turn, liveCode, source } = yield* setup("write", [
+          change("hats", revOf(hats), busier),
+        ]);
+        yield* editor.type(formatted(seed));
+
+        expect(yield* turn).toEqual([{ ok: true, landed: "written" }]);
+        expect(yield* source).toBe(seed.replace(hats, busier));
+        expect((yield* liveCode).parts.get("hats")).toBe(hats);
+      }),
+    );
+
+    it.scoped("leaves the Part without Unapplied edits", () =>
+      Effect.gen(function* () {
+        const { editor, context } = yield* setup("propose", []);
+        yield* editor.type(formatted(seed));
+
+        const snapshot = yield* Effect.provide(takeSnapshot(null), context);
+
+        expect(snapshot.parts.find((part) => part.part === "hats")).toMatchObject({
+          unapplied: false,
+        });
+        expect(snapshot.live).toEqual({});
+      }),
+    );
+
+    it.scoped("leaves an open Proposal on it acceptable", () =>
+      Effect.gen(function* () {
+        const { editor, turn, proposals, proposal, source } = yield* setup("propose", [
+          change("hats", revOf(hats), busier),
+        ]);
+        yield* turn;
+        yield* editor.type(formatted(seed));
+        yield* TestClock.adjust(0);
+
+        expect(yield* proposal).toMatchObject({ stale: false });
+        expect(yield* proposals((store) => store.accept)).toBe("accepted");
+        expect(yield* source).toBe(seed.replace(hats, busier));
+      }),
+    );
+
+    it.scoped(
+      "still plays the agent's Apply when it is the agent's text whose Layout changed",
+      () =>
+        Effect.gen(function* () {
+          const { editor, strudel, turn, liveCode, source } = yield* setup("apply", [
+            change("hats", revOf(hats), busier),
+          ]);
+          yield* strudel.setPosition(12.5);
+          yield* turn;
+          const relaidOut = (yield* source).replace(".swingBy(", "\n  .swingBy(");
+          yield* editor.type(relaidOut);
+          yield* strudel.setPosition(13);
+          yield* TestClock.adjust("1 second");
+
+          expect(strudel.evaluated[1]).toBe(relaidOut);
+          expect((yield* liveCode).parts.get("hats")).toBe(
+            busier.replace(".swingBy(", "\n  .swingBy("),
+          );
+        }),
+    );
+  });
 });
