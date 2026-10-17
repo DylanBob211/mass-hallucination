@@ -150,3 +150,21 @@ host never reverts a broken visual.
 
 **Limits.** The agent's reach on the Visual Surface is the same as on Audio. Its visual change at
 Apply Autonomy lands on the same cycle boundary as any agent Apply.
+
+## Amendment: the autonomous agent observes after it acts (autonomous-agent ticket 04)
+
+An agent that pursues a Brief has to judge its own changes, and a mix can't be judged before it is
+heard. So the agent now observes a change **after it has played**, through later snapshots (the
+digests of autonomous-agent ticket 03). It still has no read tool; the host still pushes the
+state. "Acts only when instructed" no longer holds for the autonomous agent, which acts on its
+own initiative.
+
+- **Check before landing.** After a dry-run passes, the host reads the proposed patterns and
+  applies Taste's measured Judgements (density, clash). No model is called.
+- **A new refusal**, atomic like the others:
+  `{ ok: false, reason: "taste", judgement, reading, threshold }`. The writer may retry, as with
+  `invalid`.
+- **Every change carries an Intent**, which the Verdict judges it against. Whether it becomes a
+  `change_parts` argument is settled in the spec.
+- **The Verdict comes after playing** and judges what is actually sounding. At Propose or Write
+  Autonomy, it waits until the change has been Applied, whoever applies it.

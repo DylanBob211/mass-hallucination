@@ -95,6 +95,40 @@ pursues, on its own initiative, for as long as it runs. Unlike an Instruction it
 a change lands; the agent builds on it rather than completing it.
 _Avoid_: Goal, prompt, theme, mission, first prompt
 
+**Section**:
+The part of a Performance's arc the agent means to be in (intro, build, drop, breakdown, outro).
+The agent chooses it rather than detecting it, because it is writing the piece, not reading a
+finished one. Each Section welcomes some moves and forbids others: a drop is held, not fiddled
+with. Whether the music sounds like its Section is something the agent checks, not assumes.
+_Avoid_: Phase, scene, segment, part (a Part is a named unit of code)
+
+**Taste**:
+What the agent likes: its Sections, the Judgements it makes and what each one counts as too much
+or too little. Kept apart from how the agent works, and fixed for the length of a run, so two runs
+can be compared knowing exactly which Taste each played with.
+_Avoid_: Style, preferences, aesthetics, personality
+
+**Judgement**:
+The agent's reading of one aspect of the Performance, or of a change, at a moment: how dense it
+is, whether Parts clash, whether it fits the Brief. Some are measured; some are a model's opinion.
+_Avoid_: Score, eval, metric, critique
+
+**Verdict**:
+The Judgement of whether a landed change, having played, left the Performance better, the same
+or worse than before. Always relative to what came before, never an absolute grade, and never
+given by the agent that wrote the change.
+_Avoid_: Review, grade, rating
+
+**Intent**:
+The one line an agent's change carries saying what it means to do ("thin the hats to open space
+for the bass"). What the Verdict judges the change against, alongside the Brief.
+_Avoid_: Rationale, commit message, reason
+
+**Broken**:
+The condition of a Performance that has an error, has gone silent, is clipping, or has a frozen or
+black visual output. Detected without anyone's opinion, and always worse than what it replaced.
+_Avoid_: Failure, crash, glitch
+
 ### How the agent's changes land
 
 **Autonomy**:

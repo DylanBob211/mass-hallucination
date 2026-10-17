@@ -12,3 +12,5 @@ Does the split hold, with a state machine owning the flow, a typed **decider** a
 2. Which transitions are decider calls and which are plain code.
 3. How easy it is to change a state or a policy and rerun, which is the "improve over time" promise.
 4. What a run looks like as a log of states and decisions.
+
+Inputs from 04: start from 04's loop (Listen → Act now? → Write plus Intent → check before landing → Land → Breathe → Verdict), with a stub `taste/` folder (ADR 0009) holding a few Judgements, two decider prompts and the Section table from 12. Feel whether "edit the Taste, rerun" is as easy as it should be. The transition table stays in code.
